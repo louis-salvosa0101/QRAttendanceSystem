@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Sessions - QR Attendance System{% endblock %}
+{% block page_title %}Session Management{% endblock %}
+
+{% block content %}
+<!-- Create Session -->
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="plus-circle"></i>
+            Create New Session
+        </div>
+    </div>
+    <div class="card-body">
+        <form id="createSessionForm" onsubmit="createSession(event)">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Subject / Course Name</label>
+                    <input type="text" class="form-input" id="sessionSubject"
+                           placeholder="e.g., Data Structures" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Teacher Name</label>
+                    <input type="text" class="form-input" id="sessionTeacher"
+                           placeholder="e.g., Prof. Santos">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes (optional)</label>
+                    <input type="text" class="form-input" id="sessionNotes"
+                           placeholder="e.g., Midterm week">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Duration (Hours)</label>
+                    <input type="number" class="form-input" id="sessionDuration"
+                           value="4" min="0.1" step="0.1">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary" id="btn-create-session">
+                <i data-lucide="plus"></i>
+                Create Session
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Active Sessions -->
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="radio"></i>
+            Active Sessions
+        </div>
+        <span class="badge badge-success">{{ active_sessions|length }} active</span>
+    </div>
+    <div class="card-body" id="activeSessionsList">
+        {% if active_sessions %}
+            {% for session in active_sessions %}
+            <div class="session-card" id="session-{{ session.session_id }}">
+                <div class="session-header">
+                    <div class="session-id">{{ session.session_id }}</div>
+                    <div style="display:flex;gap:8px;">
+                        <span class="badge badge-success">Active</span>
+                        <button class="btn btn-sm btn-danger" onclick="endSession('{{ session.session_id }}')"
+                                id="btn-close-{{ session.session_id }}">
+                            <i data-lucide="x"></i> Close
+                        </button>
+                    </div>
+                </div>
+                <div class="session-meta">
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Subject</div>
+                        <div class="session-meta-value">{{ session.subject or '—' }}</div>
+                    </div>
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Teacher</div>
+                        <div class="session-meta-value">{{ session.teacher or '—' }}</div>
+                    </div>
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Created</div>
+                        <div class="session-meta-value">{{ session.created_at[:16] }}</div>
+                    </div>
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Expires</div>
+                        <div class="session-meta-value">{{ session.expires_at[:16] }}</div>
+                    </div>
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Attendance</div>
+                        <div class="session-meta-value" style="color:var(--accent-success);font-size:18px;font-weight:700;">
+                            {{ session.attendance_count }}
+                        </div>
+                    </div>
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Notes</div>
+                        <div class="session-meta-value">{{ session.notes or '—' }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <i data-lucide="calendar-x"></i>
+                <h3>No Active Sessions</h3>
+                <p>Create a new session above to start tracking attendance.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- All Sessions History -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="history"></i>
+            Session History
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <span class="badge badge-info">{{ all_sessions|length }} total</span>
+            <button class="btn btn-sm btn-danger" onclick="clearSessionHistory()" id="btn-clear-sessions">
+                <i data-lucide="trash-2"></i>
+                Clear History
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if all_sessions %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Session ID</th>
+                        <th>Subject</th>
+                        <th>Teacher</th>
+                        <th>Created</th>
+                        <th>Attendance</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in all_sessions|reverse %}
+                    <tr>
+                        <td style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--accent-primary);">
+                            {{ session.session_id }}
+                        </td>
+                        <td>{{ session.subject or '—' }}</td>
+                        <td>{{ session.teacher or '—' }}</td>
+                        <td>{{ session.created_at[:16] }}</td>
+                        <td>
+                            <span style="font-weight:700;color:var(--accent-success);">{{ session.attendance_count }}</span>
+                        </td>
+                        <td>
+                            {% if session.is_active %}
+                                <span class="badge badge-success">Active</span>
+                            {% else %}
+                                <span class="badge badge-danger">Closed</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="empty-state">
+                <i data-lucide="database"></i>
+                <h3>No Sessions Yet</h3>
+                <p>Session history will appear here.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function createSession(e) {
+        e.preventDefault();
+        const subject = document.getElementById('sessionSubject').value;
+        const teacher = document.getElementById('sessionTeacher').value;
+        const notes = document.getElementById('sessionNotes').value;
+        const duration_hours = document.getElementById('sessionDuration').value;
+
+        try {
+            const result = await apiCall('/api/session/create', 'POST', {
+                subject, teacher, notes, duration_hours
+            });
+
+            if (result.success) {
+                showToast(`Session ${result.session.session_id} created successfully!`, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('Failed to create session.', 'error');
+            }
+        } catch(e) {
+            showToast('Error creating session.', 'error');
+        }
+    }
+
+    async function endSession(sessionId) {
+        if (!confirm(`Are you sure you want to close session ${sessionId}?`)) return;
+
+        try {
+            const result = await apiCall(`/api/session/${sessionId}/close`, 'POST');
+            if (result.success) {
+                showToast(`Session ${sessionId} closed.`, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch(e) {
+            showToast('Error closing session.', 'error');
+        }
+    }
+
+    async function clearSessionHistory() {
+        if (!confirm('Are you sure you want to clear ALL session history? This will delete the session data file.')) return;
+
+        try {
+            const response = await fetch('/api/session/clear-history', { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(result.message || 'Failed to clear history.', 'error');
+            }
+        } catch(e) {
+            showToast('Error clearing session history.', 'error');
+        }
+    }
+
+    lucide.createIcons();
+</script>
+{% endblock %}

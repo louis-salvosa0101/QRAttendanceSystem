@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - QR Attendance System{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card purple">
+        <div class="stat-icon"><i data-lucide="calendar-clock"></i></div>
+        <div class="stat-value" id="stat-active-sessions">{{ active_sessions|length }}</div>
+        <div class="stat-label">Active Sessions</div>
+    </div>
+    <div class="stat-card green">
+        <div class="stat-icon"><i data-lucide="users"></i></div>
+        <div class="stat-value" id="stat-total-scans">—</div>
+        <div class="stat-label">Today's Scans</div>
+    </div>
+    <div class="stat-card blue">
+        <div class="stat-icon"><i data-lucide="history"></i></div>
+        <div class="stat-value">{{ total_sessions }}</div>
+        <div class="stat-label">Total Sessions</div>
+    </div>
+    <div class="stat-card amber">
+        <div class="stat-icon"><i data-lucide="shield-check"></i></div>
+        <div class="stat-value" id="stat-security">AES</div>
+        <div class="stat-label">Encryption Active</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <!-- Quick Actions -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="zap"></i>
+                Quick Actions
+            </div>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <a href="/scanner" class="btn btn-primary btn-lg" id="btn-quick-scan" style="justify-content: center;">
+                    <i data-lucide="scan"></i>
+                    Start Scanning
+                </a>
+                <a href="/sessions" class="btn btn-success" id="btn-quick-session" style="justify-content: center;">
+                    <i data-lucide="plus-circle"></i>
+                    Create New Session
+                </a>
+                <a href="/generate" class="btn btn-outline" id="btn-quick-generate" style="justify-content: center;">
+                    <i data-lucide="qr-code"></i>
+                    Generate QR Codes
+                </a>
+                <a href="/records" class="btn btn-outline" id="btn-quick-records" style="justify-content: center;">
+                    <i data-lucide="file-spreadsheet"></i>
+                    View Records
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Sessions -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="radio"></i>
+                Active Sessions
+            </div>
+            <span class="badge badge-success">
+                <i data-lucide="circle" style="width:8px;height:8px;fill:currentColor"></i>
+                Live
+            </span>
+        </div>
+        <div class="card-body">
+            {% if active_sessions %}
+            {% for session in active_sessions %}
+            <div class="session-card" style="background: var(--bg-input);">
+                <div class="session-header">
+                    <div class="session-id">{{ session.session_id }}</div>
+                    <span class="badge badge-success">Active</span>
+                </div>
+                <div class="session-meta">
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Subject</div>
+                        <div class="session-meta-value">{{ session.subject or 'N/A' }}</div>
+                    </div>
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Attendance</div>
+                        <div class="session-meta-value">{{ session.attendance_count }} students</div>
+                    </div>
+                    <div class="session-meta-item">
+                        <div class="session-meta-label">Expires</div>
+                        <div class="session-meta-value">{{ session.expires_at[:16] }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">
+                <i data-lucide="calendar-x"></i>
+                <h3>No Active Sessions</h3>
+                <p>Create a new session to start taking attendance.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- System Info -->
+<div class="card mt-3">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="info"></i>
+            System Information
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="session-meta">
+            <div class="session-meta-item">
+                <div class="session-meta-label">Encryption</div>
+                <div class="session-meta-value">AES-256-CBC</div>
+            </div>
+            <div class="session-meta-item">
+                <div class="session-meta-label">Storage</div>
+                <div class="session-meta-value">Excel (.xlsx) - Offline</div>
+            </div>
+            <div class="session-meta-item">
+                <div class="session-meta-label">Session Duration</div>
+                <div class="session-meta-value">4 Hours</div>
+            </div>
+            <div class="session-meta-item">
+                <div class="session-meta-label">Status</div>
+                <div class="session-meta-value" style="color: var(--accent-success);">✓ System Online</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Calculate today's scans from active sessions
+    (function() {
+        var scanCounts = [
+            {% for session in active_sessions %}
+            {{ session.attendance_count }}{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+        var totalScans = scanCounts.reduce(function(a, b) { return a + b; }, 0);
+        document.getElementById('stat-total-scans').textContent = totalScans;
+    })();
+    lucide.createIcons();
+</script>
+{% endblock %}

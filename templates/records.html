@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Records - QR Attendance System{% endblock %}
+{% block page_title %}Attendance Records{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="filter"></i>
+            Search & Filter
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-primary" onclick="generateSummary()" id="btn-generate-summary">
+                <i data-lucide="bar-chart-3"></i>
+                Generate Summary
+            </button>
+            <a href="/api/records/download" class="btn btn-sm btn-success" id="btn-download-records">
+                <i data-lucide="download"></i>
+                Download Excel
+            </a>
+            <button class="btn btn-sm btn-danger" onclick="resetRecords()" id="btn-reset-records">
+                <i data-lucide="refresh-ccw"></i>
+                Reset Records
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="/records" id="filterForm">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Session ID</label>
+                    <select class="form-select" name="session_id" id="filterSessionId">
+                        <option value="">All Sessions</option>
+                        {% for session in all_sessions %}
+                        <option value="{{ session.session_id }}"
+                                {% if filters.session_id == session.session_id %}selected{% endif %}>
+                            {{ session.session_id }} — {{ session.subject or 'N/A' }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Student Number</label>
+                    <input type="text" class="form-input" name="student_number" id="filterStudentNumber"
+                           placeholder="e.g., 2024-00001" value="{{ filters.student_number }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Date From</label>
+                    <input type="date" class="form-input" name="date_from" id="filterDateFrom"
+                           value="{{ filters.date_from }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Date To</label>
+                    <input type="date" class="form-input" name="date_to" id="filterDateTo"
+                           value="{{ filters.date_to }}">
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" class="btn btn-primary btn-sm" id="btn-apply-filter">
+                    <i data-lucide="search"></i>
+                    Apply Filter
+                </button>
+                <a href="/records" class="btn btn-outline btn-sm" id="btn-clear-filter">
+                    <i data-lucide="x"></i>
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Records Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="table"></i>
+            Attendance Records
+        </div>
+        <span class="badge badge-info">{{ records|length }} records</span>
+    </div>
+    <div class="card-body">
+        {% if records %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Date & Time</th>
+                        <th>Student Name</th>
+                        <th>Student Number</th>
+                        <th>Course</th>
+                        <th>Year</th>
+                        <th>Section</th>
+                        <th>Session ID</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr>
+                        <td style="color:var(--text-muted);">{{ loop.index }}</td>
+                        <td style="font-family:'JetBrains Mono',monospace;font-size:13px;">
+                            {{ record.datetime }}
+                        </td>
+                        <td style="font-weight:600;color:var(--text-primary);">{{ record.name }}</td>
+                        <td style="font-family:'JetBrains Mono',monospace;">{{ record.student_number }}</td>
+                        <td>{{ record.course }}</td>
+                        <td>{{ record.year }}</td>
+                        <td>{{ record.section }}</td>
+                        <td>
+                            <span style="font-family:'JetBrains Mono',monospace;color:var(--accent-primary);font-weight:600;">
+                                {{ record.session_id }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if record.status == 'Time Out' %}
+                                <span class="badge badge-info">{{ record.status }}</span>
+                            {% else %}
+                                <span class="badge badge-success">{{ record.status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="empty-state">
+                <i data-lucide="file-x"></i>
+                <h3>No Records Found</h3>
+                <p>
+                    {% if filters.session_id or filters.student_number or filters.date_from or filters.date_to %}
+                        No records match your current filters. Try adjusting or clearing filters.
+                    {% else %}
+                        Attendance records will appear here after scanning QR codes.
+                    {% endif %}
+                </p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function generateSummary() {
+        try {
+            const result = await apiCall('/api/records/summary', 'POST');
+            if (result.success) {
+                showToast('Summary sheet generated successfully! Download the Excel file to view.', 'success');
+            } else {
+                showToast(result.message || 'Failed to generate summary.', 'error');
+            }
+        } catch(e) {
+            showToast('Error generating summary.', 'error');
+        }
+    }
+
+    async function resetRecords() {
+        if (!confirm('Are you sure you want to delete ALL attendance records? This will delete the Excel log file.')) return;
+
+        try {
+            const response = await fetch('/api/records/reset', { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(result.message || 'Failed to reset records.', 'error');
+            }
+        } catch(e) {
+            showToast('Error resetting records.', 'error');
+        }
+    }
+
+    lucide.createIcons();
+</script>
+{% endblock %}
