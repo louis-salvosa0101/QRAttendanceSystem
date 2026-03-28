@@ -1,4 +1,4 @@
-# 📋 Advanced QR-Based Attendance System
+# Advanced QR-Based Attendance System
 
 A modern, secure, and fully offline QR code attendance tracking system built with Flask and Python.
 
@@ -6,7 +6,7 @@ A modern, secure, and fully offline QR code attendance tracking system built wit
 
 - **AES-256 Encrypted QR Codes** — Student data is encrypted to prevent tampering
 - **Browser-Based QR Scanning** — Uses your webcam directly in the browser
-- **Excel Logging** — All attendance records stored in organized `.xlsx` files
+- **SQLite Database** — ACID-compliant local storage for students, sessions, and attendance
 - **Session Management** — Time-limited sessions with auto-expiry
 - **Duplicate Detection** — Prevents double-scanning within the same session
 - **Batch QR Generation** — Generate QR codes for all students from an Excel master list
@@ -85,7 +85,8 @@ QRAttendanceSys/
 ├── crypto_utils.py        # AES encryption/decryption
 ├── qr_generator.py        # QR code generation
 ├── session_manager.py     # Session management
-├── excel_logger.py        # Excel logging utilities
+├── db.py                  # SQLite database module
+├── excel_logger.py        # Attendance logging (SQLite) & Excel export
 ├── requirements.txt       # Python dependencies
 ├── templates/             # HTML templates
 │   ├── base.html          # Base layout
@@ -96,7 +97,7 @@ QRAttendanceSys/
 │   ├── records.html       # Attendance records
 │   └── 404.html           # Error page
 ├── static/qrcodes/        # Generated QR code images
-├── data/                  # Excel files & session data
+├── data/                  # SQLite DB (attendance.db), Excel exports
 └── uploads/               # Uploaded master lists
 ```
 
@@ -106,7 +107,18 @@ Edit `config.py` to customize:
 
 - `AES_KEY` / `AES_IV` — Encryption keys (change for production!)
 - `SESSION_DURATION_HOURS` — How long sessions remain active (default: 4 hours)
+- `DATABASE_PATH` — SQLite database file (default: `data/attendance.db`)
 - File paths for data storage
+
+### Migrating from JSON/Excel (Legacy)
+
+If you have existing data in `sessions.json`, `student_registry.json`, or `attendance_log.xlsx`, run:
+
+```bash
+python migrate_to_sqlite.py
+```
+
+This imports all legacy data into SQLite. Back up your data folder before running.
 
 ## Excel Master List Format
 
@@ -121,7 +133,7 @@ Edit `config.py` to customize:
 - **QR Generation:** qrcode, Pillow
 - **QR Scanning:** html5-qrcode (browser-based)
 - **Encryption:** PyCryptodome (AES-256-CBC)
-- **Data Storage:** openpyxl (Excel)
+- **Data Storage:** SQLite (primary), openpyxl (Excel export)
 - **UI:** Custom CSS with glassmorphism design
 - **Icons:** Lucide Icons
 

@@ -3,6 +3,11 @@
 {% block page_title %}Session Management{% endblock %}
 
 {% block content %}
+<style>
+.year-option { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; font-size:13px; transition:var(--transition-fast); }
+.year-option:hover { border-color:var(--border-hover); background:var(--bg-card-hover); }
+.year-option input { cursor:pointer; }
+</style>
 <!-- Create Session -->
 <div class="card mb-3">
     <div class="card-header">
@@ -15,12 +20,12 @@
         <form id="createSessionForm" onsubmit="createSession(event)">
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Subject / Course Name</label>
+                    <label class="form-label">Subject / Event Name</label>
                     <input type="text" class="form-input" id="sessionSubject"
                            placeholder="e.g., Data Structures" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Teacher Name</label>
+                    <label class="form-label">Teacher / Organizer</label>
                     <input type="text" class="form-input" id="sessionTeacher"
                            placeholder="e.g., Prof. Santos">
                 </div>
@@ -35,6 +40,49 @@
                            value="4" min="0.1" step="0.1">
                 </div>
             </div>
+
+            <!-- Required Attendees Filter -->
+            <div style="border-top:1px solid var(--border);margin:16px 0 16px;padding-top:16px;">
+                <div style="font-size:13px;font-weight:600;color:var(--accent-warning);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="users" style="width:16px;height:16px;"></i>
+                    Required Attendees Filter
+                    <span style="font-size:11px;color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0;">(leave blank = all students; absent students will be fined ₱50)</span>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Course / Program</label>
+                        <select class="form-select" id="sessionCourse">
+                            <option value="">All Courses</option>
+                            {% for c in courses %}
+                            <option value="{{ c }}">{{ c }}</option>
+                            {% endfor %}
+                            <option value="__custom__">Type custom…</option>
+                        </select>
+                        <input type="text" class="form-input mt-1" id="sessionCourseCustom"
+                               placeholder="e.g., BSCS" style="display:none;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Year Level</label>
+                        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Leave all unchecked = all years included</div>
+                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
+                            <label class="year-option"><input type="checkbox" name="sessionYear" value="1"> 1st Year</label>
+                            <label class="year-option"><input type="checkbox" name="sessionYear" value="2"> 2nd Year</label>
+                            <label class="year-option"><input type="checkbox" name="sessionYear" value="3"> 3rd Year</label>
+                            <label class="year-option"><input type="checkbox" name="sessionYear" value="4"> 4th Year</label>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <button type="button" class="btn btn-sm btn-outline" onclick="selectAllYears()">All Years</button>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="clearYears()">Clear</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Section</label>
+                        <input type="text" class="form-input" id="sessionSection"
+                               placeholder="e.g., A (blank = all)">
+                    </div>
+                </div>
+            </div>
+
             <button type="submit" class="btn btn-primary" id="btn-create-session">
                 <i data-lucide="plus"></i>
                 Create Session
@@ -90,6 +138,15 @@
                         </div>
                     </div>
                     <div class="session-meta-item">
+                        <div class="session-meta-label">Required</div>
+                        <div class="session-meta-value" style="font-size:12px;">
+                            {% if session.required_course %}{{ session.required_course }}{% endif %}
+                            {% if session.required_year %} · Yr {{ session.required_year|join(', ') }}{% endif %}
+                            {% if session.required_section %} · Sec {{ session.required_section }}{% endif %}
+                            {% if not session.required_course and not session.required_year and not session.required_section %}All Students{% endif %}
+                        </div>
+                    </div>
+                    <div class="session-meta-item">
                         <div class="session-meta-label">Notes</div>
                         <div class="session-meta-value">{{ session.notes or '—' }}</div>
                     </div>
@@ -130,6 +187,7 @@
                         <th>Session ID</th>
                         <th>Subject</th>
                         <th>Teacher</th>
+                        <th>Required</th>
                         <th>Created</th>
                         <th>Attendance</th>
                         <th>Status</th>
@@ -143,6 +201,12 @@
                         </td>
                         <td>{{ session.subject or '—' }}</td>
                         <td>{{ session.teacher or '—' }}</td>
+                        <td style="font-size:12px;color:var(--text-muted);">
+                            {% if session.required_course %}{{ session.required_course }}{% endif %}
+                            {% if session.required_year %} · Yr {{ session.required_year|join(', ') }}{% endif %}
+                            {% if session.required_section %} · Sec {{ session.required_section }}{% endif %}
+                            {% if not session.required_course and not session.required_year and not session.required_section %}All{% endif %}
+                        </td>
                         <td>{{ session.created_at[:16] }}</td>
                         <td>
                             <span style="font-weight:700;color:var(--accent-success);">{{ session.attendance_count }}</span>
@@ -172,20 +236,43 @@
 
 {% block scripts %}
 <script>
+    // Handle custom course input
+    document.getElementById('sessionCourse').addEventListener('change', function() {
+        const custom = document.getElementById('sessionCourseCustom');
+        custom.style.display = this.value === '__custom__' ? 'block' : 'none';
+    });
+
+    function getCourseValue() {
+        const sel = document.getElementById('sessionCourse');
+        if (sel.value === '__custom__') return document.getElementById('sessionCourseCustom').value.trim();
+        return sel.value;
+    }
+
+    function selectAllYears() {
+        document.querySelectorAll('input[name="sessionYear"]').forEach(cb => cb.checked = true);
+    }
+    function clearYears() {
+        document.querySelectorAll('input[name="sessionYear"]').forEach(cb => cb.checked = false);
+    }
+
     async function createSession(e) {
         e.preventDefault();
         const subject = document.getElementById('sessionSubject').value;
         const teacher = document.getElementById('sessionTeacher').value;
         const notes = document.getElementById('sessionNotes').value;
         const duration_hours = document.getElementById('sessionDuration').value;
+        const required_course = getCourseValue();
+        const required_year = Array.from(document.querySelectorAll('input[name="sessionYear"]:checked')).map(cb => cb.value);
+        const required_section = document.getElementById('sessionSection').value;
 
         try {
             const result = await apiCall('/api/session/create', 'POST', {
-                subject, teacher, notes, duration_hours
+                subject, teacher, notes, duration_hours,
+                required_course, required_year, required_section
             });
 
             if (result.success) {
-                showToast(`Session ${result.session.session_id} created successfully!`, 'success');
+                showToast(`Session ${result.session.session_id} created successfully.`, 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
                 showToast('Failed to create session.', 'error');
@@ -196,15 +283,22 @@
     }
 
     async function endSession(sessionId) {
-        if (!confirm(`Are you sure you want to close session ${sessionId}?`)) return;
+        if (!confirm(`Close session ${sessionId}?\n\nThis will:\n- Mark all required students who didn't scan as ABSENT (₱50 fine)\n- Apply ₱25 fine to students who only scanned Time In\n\nProceed?`)) return;
 
         try {
+            const btn = document.getElementById(`btn-close-${sessionId}`);
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader"></i> Closing...'; }
+
             const result = await apiCall(`/api/session/${sessionId}/close`, 'POST');
             if (result.success) {
-                showToast(`Session ${sessionId} closed.`, 'success');
-                setTimeout(() => location.reload(), 1000);
+                let msg = `Session ${sessionId} closed.`;
+                if (result.absent_logged > 0) msg += ` ${result.absent_logged} student(s) marked absent (₱50 fine each).`;
+                if (result.partial_updated > 0) msg += ` ${result.partial_updated} partial scan(s) fined ₱25.`;
+                showToast(msg, 'success');
+                setTimeout(() => location.reload(), 1500);
             } else {
                 showToast(result.message, 'error');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="x"></i> Close'; }
             }
         } catch(e) {
             showToast('Error closing session.', 'error');

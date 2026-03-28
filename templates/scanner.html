@@ -21,8 +21,7 @@
                         <option value="">Select a session...</option>
                         {% for session in active_sessions %}
                         <option value="{{ session.session_id }}">
-                            {{ session.session_id }} — {{ session.subject or 'No subject' }}
-                            ({{ session.attendance_count }} scans)
+                            {{ session.session_id }} — {{ session.subject or 'No subject' }}{% if session.required_course or session.required_year or session.required_section %} — {% if session.required_course %}{{ session.required_course }}{% endif %}{% if session.required_year %} Yr{{ session.required_year|join(',') }}{% endif %}{% if session.required_section %} Sec{{ session.required_section }}{% endif %}{% endif %} ({{ session.attendance_count }} scans)
                         </option>
                         {% endfor %}
                     </select>
@@ -209,7 +208,7 @@
             
             // Check if not localhost and not HTTPS
             if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                errorMsg = '⚠️ Camera blocked: Mobile browsers require HTTPS for camera access. Use a tool like ngrok or check SETUP_GUIDE.md.';
+                errorMsg = 'Camera blocked: Mobile browsers require HTTPS for camera access. Use ngrok or check SETUP_GUIDE.md.';
             }
             
             showToast(errorMsg, 'error');
@@ -273,17 +272,19 @@
             if (result.success) {
                 // Success - show Time In or Time Out
                 const isTimeOut = result.scan_type === 'time_out';
-                showToast(result.message, 'success');
-                resultArea.innerHTML = buildScanResultCard(result.student, 'success', result.message, result.status);
-                addToFeed(result.student, true, '', result.status);
+                const toastType = result.fine > 0 ? 'warning' : 'success';
+                showToast(result.message, toastType);
+                resultArea.innerHTML = buildScanResultCard(result.student, 'success', result.message, result.status, result.fine, result.fine_reason);
+                addToFeed(result.student, true, '', result.status, result.fine);
                 refreshStats();
 
-                // Visual feedback - green for Time In, blue for Time Out
-                pulseSuccess(isTimeOut ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.4)');
+                // Visual feedback: yellow if fined, green for Time In, blue for Time Out
+                const pulseColor = result.fine > 0 ? 'rgba(245, 158, 11, 0.5)' : (isTimeOut ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.4)');
+                pulseSuccess(pulseColor);
 
             } else {
-                // Error
-                const errorType = result.error === 'duplicate' ? 'warning' : 'error';
+                // Error: duplicate, not_included, invalid_qr, etc.
+                const errorType = (result.error === 'duplicate' || result.error === 'not_included') ? 'warning' : 'error';
                 showToast(result.message, errorType === 'warning' ? 'warning' : 'error');
 
                 resultArea.innerHTML = buildScanResultCard(
@@ -304,7 +305,7 @@
         lucide.createIcons();
     }
 
-    function buildScanResultCard(student, type, message, status) {
+    function buildScanResultCard(student, type, message, status, fine, fineReason) {
         if (!student) {
             return `
                 <div class="scan-result ${type}">
@@ -322,6 +323,16 @@
                 <i data-lucide="${status === 'Time In' ? 'log-in' : 'log-out'}" style="width:14px;height:14px;"></i>
                 ${status}
                </span>`
+            : '';
+
+        const fineBadge = (fine && fine > 0)
+            ? `<div style="margin-top:10px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px;">
+                   <i data-lucide="alert-triangle" style="width:16px;height:16px;color:#d97706;"></i>
+                   <div>
+                       <span style="font-weight:700;color:#d97706;font-size:14px;">Fine: ₱${fine}</span>
+                       <span style="color:var(--text-muted);font-size:12px;margin-left:8px;">${fineReason || ''}</span>
+                   </div>
+               </div>`
             : '';
 
         return `
@@ -342,11 +353,12 @@
                     <span class="student-info-label">Course</span>
                     <span class="student-info-value">${student.course} ${student.year}-${student.section}</span>
                 </div>
+                ${fineBadge}
             </div>
         `;
     }
 
-    function addToFeed(student, success, errorMsg = '', status = '') {
+    function addToFeed(student, success, errorMsg = '', status = '', fine = 0) {
         const feed = document.getElementById('liveFeed');
         const liveBadge = document.getElementById('liveBadge');
         liveBadge.style.display = 'inline-flex';
@@ -359,15 +371,17 @@
         const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
         const isTimeOut = status === 'Time Out';
-        const avatarClass = !success ? 'error' : (isTimeOut ? 'timeout' : 'success');
+        const hasFineLate = fine > 0;
+        const avatarClass = !success ? 'error' : (hasFineLate ? 'late' : (isTimeOut ? 'timeout' : 'success'));
         const statusLabel = status ? `<span class="badge ${status === 'Time In' ? 'badge-success' : 'badge-info'}" style="font-size:10px;padding:2px 8px;margin-left:6px;">${status}</span>` : '';
+        const fineLabel = fine > 0 ? `<span class="badge" style="font-size:10px;padding:2px 8px;margin-left:4px;background:rgba(245,158,11,0.2);color:#d97706;border:1px solid rgba(245,158,11,0.4);">₱${fine} fine</span>` : '';
 
         const item = document.createElement('div');
         item.className = 'feed-item';
         item.innerHTML = `
             <div class="feed-avatar ${avatarClass}">${initials}</div>
             <div class="feed-info">
-                <div class="feed-name">${student.name} ${statusLabel}</div>
+                <div class="feed-name">${student.name} ${statusLabel}${fineLabel}</div>
                 <div class="feed-detail">${student.student_number} · ${student.course} ${student.year}-${student.section}
                     ${!success ? ' · ' + errorMsg : ''}</div>
             </div>

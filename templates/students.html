@@ -1,0 +1,552 @@
+{% extends "base.html" %}
+{% block title %}Student Registry - QR Attendance System{% endblock %}
+{% block page_title %}Student Registry{% endblock %}
+
+{% block content %}
+<!-- Stats Row -->
+<div class="stats-grid mb-3" style="grid-template-columns:repeat(2,1fr);">
+    <div class="stat-card">
+        <div class="stat-icon"><i data-lucide="users"></i></div>
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Registered Students</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i data-lucide="graduation-cap"></i></div>
+        <div class="stat-value">{{ stats.by_course|length }}</div>
+        <div class="stat-label">Courses / Programs</div>
+    </div>
+</div>
+
+<!-- QR Scanner Registration -->
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="scan"></i>
+            Register via QR Scan
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <span id="scanCountBadge" class="badge badge-success" style="display:none;">0 scanned</span>
+            <button class="btn btn-sm btn-outline" id="btnToggleCamera" onclick="toggleRegistryCamera()">
+                <i data-lucide="video"></i>
+                Start Camera
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
+
+            <!-- Camera -->
+            <div style="flex:0 0 auto;">
+                <div id="registryScannerContainer" style="
+                    position:relative;width:280px;height:280px;
+                    border-radius:var(--radius-lg);overflow:hidden;
+                    background:#000;border:2px solid var(--border);">
+
+                    <!-- html5-qrcode target -->
+                    <div id="qr-registry-reader" style="width:100%;height:100%;"></div>
+
+                    <!-- Placeholder shown when camera is off -->
+                    <div id="registryPlaceholder" style="
+                        position:absolute;inset:0;display:flex;flex-direction:column;
+                        align-items:center;justify-content:center;gap:10px;
+                        background:var(--bg-card);">
+                        <i data-lucide="camera-off" style="width:40px;height:40px;color:var(--text-muted);"></i>
+                        <p style="color:var(--text-muted);font-size:13px;text-align:center;padding:0 16px;">
+                            Click "Start Camera" to begin scanning QR codes for registration
+                        </p>
+                    </div>
+
+                    <!-- Scanner corners overlay (decorative) -->
+                    <div id="registryScanOverlay" style="display:none;position:absolute;inset:0;pointer-events:none;">
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:65%;aspect-ratio:1;">
+                            <div style="position:absolute;top:-2px;left:-2px;width:28px;height:28px;border-top:3px solid var(--accent-primary);border-left:3px solid var(--accent-primary);border-radius:4px 0 0 0;"></div>
+                            <div style="position:absolute;top:-2px;right:-2px;width:28px;height:28px;border-top:3px solid var(--accent-primary);border-right:3px solid var(--accent-primary);border-radius:0 4px 0 0;"></div>
+                            <div style="position:absolute;bottom:-2px;left:-2px;width:28px;height:28px;border-bottom:3px solid var(--accent-primary);border-left:3px solid var(--accent-primary);border-radius:0 0 0 4px;"></div>
+                            <div style="position:absolute;bottom:-2px;right:-2px;width:28px;height:28px;border-bottom:3px solid var(--accent-primary);border-right:3px solid var(--accent-primary);border-radius:0 0 4px 0;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manual paste fallback -->
+                <div style="margin-top:10px;">
+                    <div style="display:flex;gap:6px;">
+                        <input type="text" class="form-input" id="manualQrReg"
+                               placeholder="Or paste QR data here…"
+                               style="font-size:12px;padding:8px 10px;">
+                        <button class="btn btn-sm btn-primary" onclick="processRegistryQr(document.getElementById('manualQrReg').value)" id="btn-manual-reg-scan">
+                            <i data-lucide="search"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live result & log -->
+            <div style="flex:1;min-width:240px;">
+                <!-- Last scan result -->
+                <div id="regScanResult" style="
+                    min-height:100px;background:var(--bg-input);border:1px solid var(--border);
+                    border-radius:var(--radius-md);padding:16px;margin-bottom:12px;
+                    display:flex;align-items:center;justify-content:center;">
+                    <div style="text-align:center;color:var(--text-muted);font-size:13px;">
+                        <i data-lucide="scan-line" style="width:32px;height:32px;margin-bottom:8px;opacity:0.4;display:block;margin-left:auto;margin-right:auto;"></i>
+                        Scan result will appear here
+                    </div>
+                </div>
+
+                <!-- Registration log (shows last 5) -->
+                <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">
+                    Recent Registrations
+                </div>
+                <div id="regLog" style="
+                    max-height:180px;overflow-y:auto;
+                    background:var(--bg-input);border:1px solid var(--border);
+                    border-radius:var(--radius-md);">
+                    <div id="regLogEmpty" style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">
+                        No registrations yet this session
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <!-- Register Single Student (Manual) -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="user-plus"></i>
+                Manual Registration
+            </div>
+        </div>
+        <div class="card-body">
+            <form id="registerForm" onsubmit="registerStudent(event)">
+                <div class="form-group">
+                    <label class="form-label">Full Name <span style="color:var(--accent-danger);">*</span></label>
+                    <input type="text" class="form-input" id="regName" placeholder="e.g., Juan Dela Cruz" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Student Number <span style="color:var(--accent-danger);">*</span></label>
+                    <input type="text" class="form-input" id="regStudentNumber" placeholder="e.g., 2024-00001" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Course</label>
+                        <input type="text" class="form-input" id="regCourse" placeholder="e.g., BSCS">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Year Level</label>
+                        <select class="form-select" id="regYear">
+                            <option value="">—</option>
+                            <option value="1">1st Year</option>
+                            <option value="2">2nd Year</option>
+                            <option value="3">3rd Year</option>
+                            <option value="4">4th Year</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Section</label>
+                        <input type="text" class="form-input" id="regSection" placeholder="e.g., A">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" id="btn-register-student">
+                    <i data-lucide="user-plus"></i>
+                    Register Student
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Import from Excel -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="file-spreadsheet"></i>
+                Bulk Import from Excel
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-warning" style="margin-bottom:16px;">
+                <i data-lucide="info"></i>
+                <div>
+                    <strong>Required columns:</strong> Name, Student Number, Course, Year, Section<br>
+                    <span style="font-size:12px;">This will add new students and update existing ones.</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Upload Excel File (.xlsx / .xls)</label>
+                <input type="file" class="form-input" id="importFile" accept=".xlsx,.xls">
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <button class="btn btn-primary" onclick="importStudents()" id="btn-import-students">
+                    <i data-lucide="upload"></i>
+                    Import Students
+                </button>
+            </div>
+
+            <div style="border-top:1px solid var(--border);padding-top:16px;">
+                <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">Danger Zone</div>
+                <button class="btn btn-sm btn-danger" onclick="clearAllStudents()" id="btn-clear-students">
+                    <i data-lucide="trash-2"></i>
+                    Clear All Students
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Students Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="list"></i>
+            Registered Students
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <span class="badge badge-info">{{ students|length }} students</span>
+            <input type="text" id="searchInput" class="form-input" style="width:200px;padding:6px 12px;font-size:13px;"
+                   placeholder="Search name or number…" oninput="filterTable()">
+        </div>
+    </div>
+    <div class="card-body">
+        {% if students %}
+        <div class="table-container">
+            <table id="studentsTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Student Name</th>
+                        <th>Student Number</th>
+                        <th>Course</th>
+                        <th>Year</th>
+                        <th>Section</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="studentsTableBody">
+                    {% for student in students %}
+                    <tr id="row-{{ loop.index }}">
+                        <td style="color:var(--text-muted);">{{ loop.index }}</td>
+                        <td style="font-weight:600;color:var(--text-primary);">{{ student.name }}</td>
+                        <td style="font-family:'JetBrains Mono',monospace;">{{ student.student_number }}</td>
+                        <td>{{ student.course or '—' }}</td>
+                        <td>{{ student.year or '—' }}</td>
+                        <td>{{ student.section or '—' }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-danger"
+                                    onclick="deleteStudent('{{ student.student_number }}')"
+                                    id="del-{{ loop.index }}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="empty-state" id="emptyState">
+                <i data-lucide="user-x"></i>
+                <h3>No Students Registered</h3>
+                <p>Register students by scanning their QR code, manually, or import from Excel. Students are also auto-registered when their QR is scanned during attendance.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+    /* ─── QR REGISTRY SCANNER ────────────────────────────── */
+    let registryQr = null;
+    let registryCameraActive = false;
+    let registryProcessing = false;
+    let lastRegContent = '';
+    let lastRegTime = 0;
+    let scanCount = 0;
+
+    async function toggleRegistryCamera() {
+        const btn = document.getElementById('btnToggleCamera');
+        const placeholder = document.getElementById('registryPlaceholder');
+        const overlay = document.getElementById('registryScanOverlay');
+
+        if (registryCameraActive) {
+            // Stop
+            if (registryQr) {
+                try { await registryQr.stop(); registryQr.clear(); } catch(e) {}
+                registryQr = null;
+            }
+            registryCameraActive = false;
+            btn.innerHTML = '<i data-lucide="video"></i> Start Camera';
+            placeholder.style.display = 'flex';
+            overlay.style.display = 'none';
+            lucide.createIcons();
+            return;
+        }
+
+        // Start
+        try {
+            placeholder.style.display = 'none';
+            overlay.style.display = 'block';
+
+            registryQr = new Html5Qrcode('qr-registry-reader');
+            await registryQr.start(
+                { facingMode: 'environment' },
+                { fps: 10, qrbox: { width: 180, height: 180 }, aspectRatio: 1.0 },
+                onRegistryScanSuccess,
+                () => {}   // ignore decode errors
+            );
+
+            registryCameraActive = true;
+            btn.innerHTML = '<i data-lucide="video-off"></i> Stop Camera';
+            lucide.createIcons();
+            showToast('Camera ready — point at a student QR code.', 'success');
+
+        } catch (err) {
+            console.error(err);
+            placeholder.style.display = 'flex';
+            overlay.style.display = 'none';
+            let msg = 'Failed to access camera. Check permissions.';
+            if (window.location.protocol !== 'https:' &&
+                window.location.hostname !== 'localhost' &&
+                window.location.hostname !== '127.0.0.1') {
+                msg = 'Camera needs HTTPS on mobile. See SETUP_GUIDE.md.';
+            }
+            showToast(msg, 'error');
+        }
+    }
+
+    function onRegistryScanSuccess(decodedText) {
+        const now = Date.now();
+        if (registryProcessing) return;
+        // Debounce: same QR within 4 seconds
+        if (decodedText === lastRegContent && (now - lastRegTime) < 4000) return;
+        lastRegContent = decodedText;
+        lastRegTime = now;
+        processRegistryQr(decodedText);
+    }
+
+    async function processRegistryQr(qrData) {
+        qrData = (qrData || '').trim();
+        if (!qrData) { showToast('No QR data to process.', 'warning'); return; }
+        if (registryProcessing) return;
+
+        registryProcessing = true;
+        setRegResult('loading');
+
+        try {
+            const result = await apiCall('/api/students/register-qr', 'POST', { qr_data: qrData });
+
+            if (result.success) {
+                scanCount++;
+                updateScanBadge();
+                setRegResult('success', result.student, result.message, result.is_new);
+                addToRegLog(result.student, result.is_new);
+                pulseRegScanner('rgba(16,185,129,0.5)');
+                showToast(result.message, 'success');
+                // Clear manual input if used
+                const mi = document.getElementById('manualQrReg');
+                if (mi) mi.value = '';
+            } else {
+                setRegResult('error', null, result.message);
+                pulseRegScanner('rgba(239,68,68,0.5)');
+                showToast(result.message, 'error');
+            }
+        } catch (err) {
+            setRegResult('error', null, 'Network error. Please try again.');
+            showToast('Network error.', 'error');
+        }
+
+        registryProcessing = false;
+        lucide.createIcons();
+    }
+
+    function setRegResult(state, student, message, isNew) {
+        const area = document.getElementById('regScanResult');
+
+        if (state === 'loading') {
+            area.innerHTML = `
+                <div style="text-align:center;color:var(--text-muted);">
+                    <div style="width:28px;height:28px;border:3px solid rgba(108,99,255,0.3);border-top-color:var(--accent-primary);border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto 10px;"></div>
+                    <div style="font-size:13px;">Processing QR code…</div>
+                </div>`;
+            return;
+        }
+
+        if (state === 'error') {
+            area.innerHTML = `
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <i data-lucide="x-circle" style="width:28px;height:28px;color:var(--accent-danger);flex-shrink:0;"></i>
+                    <div style="font-size:14px;color:var(--accent-danger);font-weight:600;">${message}</div>
+                </div>`;
+            lucide.createIcons();
+            return;
+        }
+
+        // success
+        const badge = isNew
+            ? `<span class="badge badge-success" style="font-size:11px;">New</span>`
+            : `<span class="badge badge-info" style="font-size:11px;">Updated</span>`;
+
+        area.innerHTML = `
+            <div style="width:100%;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                    <i data-lucide="check-circle" style="width:28px;height:28px;color:var(--accent-success);flex-shrink:0;"></i>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:var(--accent-success);">Registered! ${badge}</div>
+                        <div style="font-size:12px;color:var(--text-muted);">${message}</div>
+                    </div>
+                </div>
+                <div style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;">
+                    <span style="color:var(--text-muted);font-weight:600;">Name</span>
+                    <span style="color:var(--text-primary);font-weight:600;">${student.name}</span>
+                    <span style="color:var(--text-muted);font-weight:600;">ID</span>
+                    <span style="color:var(--accent-primary);font-family:'JetBrains Mono',monospace;">${student.student_number}</span>
+                    <span style="color:var(--text-muted);font-weight:600;">Course</span>
+                    <span style="color:var(--text-secondary);">${student.course || '—'} ${student.year || ''}${student.section ? '-'+student.section : ''}</span>
+                </div>
+            </div>`;
+        lucide.createIcons();
+    }
+
+    function addToRegLog(student, isNew) {
+        const log = document.getElementById('regLog');
+        const empty = document.getElementById('regLogEmpty');
+        if (empty) empty.remove();
+
+        const time = new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);animation:slideIn 0.3s ease;';
+        item.innerHTML = `
+            <div style="width:32px;height:32px;border-radius:50%;background:rgba(16,185,129,0.15);color:var(--accent-success);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">
+                ${student.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${student.name}
+                    <span class="badge ${isNew ? 'badge-success' : 'badge-info'}" style="font-size:10px;padding:2px 6px;margin-left:4px;">${isNew ? 'New' : 'Updated'}</span>
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">${student.student_number}</div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;flex-shrink:0;">${time}</div>`;
+        log.insertBefore(item, log.firstChild);
+    }
+
+    function updateScanBadge() {
+        const badge = document.getElementById('scanCountBadge');
+        badge.style.display = 'inline-flex';
+        badge.textContent = `${scanCount} scanned`;
+    }
+
+    function pulseRegScanner(color) {
+        const c = document.getElementById('registryScannerContainer');
+        c.style.boxShadow = `0 0 30px ${color}`;
+        c.style.transition = 'box-shadow 0.1s ease';
+        setTimeout(() => { c.style.boxShadow = 'none'; c.style.transition = 'box-shadow 0.5s ease'; }, 500);
+    }
+
+    // Allow Enter on manual input
+    document.getElementById('manualQrReg').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') processRegistryQr(e.target.value);
+    });
+
+    /* ─── MANUAL FORM ────────────────────────────────────── */
+    async function registerStudent(e) {
+        e.preventDefault();
+        const data = {
+            name: document.getElementById('regName').value,
+            student_number: document.getElementById('regStudentNumber').value,
+            course: document.getElementById('regCourse').value,
+            year: document.getElementById('regYear').value,
+            section: document.getElementById('regSection').value,
+        };
+        try {
+            const result = await apiCall('/api/students/register', 'POST', data);
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch(err) {
+            showToast('Error registering student.', 'error');
+        }
+    }
+
+    /* ─── EXCEL IMPORT ───────────────────────────────────── */
+    async function importStudents() {
+        const fileInput = document.getElementById('importFile');
+        if (!fileInput.files.length) { showToast('Please select a file first.', 'warning'); return; }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        const btn = document.getElementById('btn-import-students');
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader"></i> Importing…';
+        lucide.createIcons();
+
+        try {
+            const response = await fetch('/api/students/import', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch(err) {
+            showToast('Error importing students.', 'error');
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="upload"></i> Import Students';
+        lucide.createIcons();
+    }
+
+    /* ─── DELETE / CLEAR ─────────────────────────────────── */
+    async function deleteStudent(studentNumber) {
+        if (!confirm(`Delete student ${studentNumber} from the registry?`)) return;
+        try {
+            const response = await fetch(`/api/students/${encodeURIComponent(studentNumber)}`, { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch(err) {
+            showToast('Error deleting student.', 'error');
+        }
+    }
+
+    async function clearAllStudents() {
+        if (!confirm('Are you sure? This will remove ALL students from the registry. Existing attendance records are not affected.')) return;
+        try {
+            const response = await fetch('/api/students/clear', { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch(err) {
+            showToast('Error clearing students.', 'error');
+        }
+    }
+
+    /* ─── TABLE SEARCH ───────────────────────────────────── */
+    function filterTable() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        const rows = document.querySelectorAll('#studentsTable tbody tr');
+        rows.forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
+        });
+    }
+
+    lucide.createIcons();
+</script>
+{% endblock %}

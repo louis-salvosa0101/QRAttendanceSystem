@@ -1,21 +1,24 @@
 """
-Excel logging module for attendance records.
-Creates organized spreadsheets with daily/session sheets and summary statistics.
+Attendance logging module.
+Stores records in SQLite; provides Excel export for reports.
 """
 import os
 from datetime import datetime
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from config import ATTENDANCE_LOG_FILE, EXCEL_DIR
+
+from config import ATTENDANCE_LOG_FILE, EXCEL_DIR, FINE_ABSENT, FINE_PARTIAL, FINE_LATE
+from db import get_db, _row_to_dict
 
 
-# Style constants
+# Style constants for Excel export
 HEADER_FONT = Font(name='Calibri', bold=True, size=12, color='FFFFFF')
 HEADER_FILL = PatternFill(start_color='1a1a2e', end_color='1a1a2e', fill_type='solid')
-ACCENT_FILL = PatternFill(start_color='16213e', end_color='16213e', fill_type='solid')
 SUCCESS_FILL = PatternFill(start_color='d4edda', end_color='d4edda', fill_type='solid')
 TIMEOUT_FILL = PatternFill(start_color='cce5ff', end_color='cce5ff', fill_type='solid')
+ABSENT_FILL = PatternFill(start_color='f8d7da', end_color='f8d7da', fill_type='solid')
+LATE_FILL = PatternFill(start_color='fff3cd', end_color='fff3cd', fill_type='solid')
 HEADER_ALIGNMENT = Alignment(horizontal='center', vertical='center', wrap_text=True)
 THIN_BORDER = Border(
     left=Side(style='thin', color='cccccc'),
@@ -25,35 +28,10 @@ THIN_BORDER = Border(
 )
 
 ATTENDANCE_HEADERS = [
-    'Date & Time',
-    'Student Name',
-    'Student Number',
-    'Course',
-    'Year',
-    'Section',
-    'Session ID',
-    'Status'
+    'Date & Time', 'Student Name', 'Student Number', 'Course', 'Year', 'Section',
+    'Session ID', 'Status', 'Fine (PHP)', 'Fine Reason'
 ]
-
-COLUMN_WIDTHS = [22, 30, 20, 15, 8, 10, 15, 15]
-
-
-def _get_or_create_workbook(filepath: str = None) -> tuple:
-    """Get existing workbook or create a new one."""
-    if filepath is None:
-        filepath = ATTENDANCE_LOG_FILE
-
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-
-    if os.path.exists(filepath):
-        wb = load_workbook(filepath)
-    else:
-        wb = Workbook()
-        # Remove default sheet
-        if 'Sheet' in wb.sheetnames:
-            del wb['Sheet']
-
-    return wb, filepath
+COLUMN_WIDTHS = [22, 30, 20, 15, 8, 10, 15, 15, 12, 40]
 
 
 def _style_header_row(ws, headers, widths):
@@ -65,7 +43,6 @@ def _style_header_row(ws, headers, widths):
         cell.alignment = HEADER_ALIGNMENT
         cell.border = THIN_BORDER
         ws.column_dimensions[get_column_letter(col_idx)].width = width
-
     ws.freeze_panes = 'A2'
     ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
 
@@ -74,120 +51,167 @@ def _get_session_sheet_name(session_id: str) -> str:
     """Generate a sheet name for a session."""
     today = datetime.now().strftime('%Y-%m-%d')
     name = f"{today}_{session_id}"
-    # Excel sheet names max 31 chars
     return name[:31]
 
 
-def log_attendance(student_data: dict, session_id: str, status: str = "Present") -> bool:
+def log_attendance(student_data: dict, session_id: str, status: str = "Present",
+                   fine: int = 0, fine_reason: str = '') -> bool:
     """
-    Log a single attendance record.
-    Creates a new sheet for each session automatically.
+    Log a single attendance record to SQLite.
     """
-    wb, filepath = _get_or_create_workbook()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     try:
-        sheet_name = _get_session_sheet_name(session_id)
-
-        # Create or get session sheet
-        if sheet_name not in wb.sheetnames:
-            ws = wb.create_sheet(title=sheet_name)
-            _style_header_row(ws, ATTENDANCE_HEADERS, COLUMN_WIDTHS)
-        else:
-            ws = wb[sheet_name]
-
-        # Add record
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        row_data = [
-            now,
-            student_data.get('name', ''),
-            student_data.get('student_number', ''),
-            student_data.get('course', ''),
-            student_data.get('year', ''),
-            student_data.get('section', ''),
-            session_id,
-            status
-        ]
-
-        next_row = ws.max_row + 1
-        for col_idx, value in enumerate(row_data, 1):
-            cell = ws.cell(row=next_row, column=col_idx, value=value)
-            cell.border = THIN_BORDER
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            if status == "Time In":
-                cell.fill = SUCCESS_FILL
-            elif status == "Time Out":
-                cell.fill = TIMEOUT_FILL
-
-        wb.save(filepath)
+        with get_db() as conn:
+            conn.execute(
+                """INSERT INTO attendance_records
+                   (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    now,
+                    student_data.get('name', ''),
+                    student_data.get('student_number', ''),
+                    student_data.get('course', ''),
+                    student_data.get('year', ''),
+                    student_data.get('section', ''),
+                    session_id,
+                    status,
+                    fine or 0,
+                    fine_reason or '',
+                ),
+            )
         return True
-
     except Exception as e:
         print(f"Error logging attendance: {e}")
         return False
-    finally:
-        wb.close()
+
+
+def log_absent_students(session_id: str, session_data: dict,
+                        required_students: list) -> dict:
+    """
+    After a session closes, log all registered students who did NOT scan as Absent.
+    Update any student who only Time In (no Time Out) to Partial with FINE_PARTIAL.
+    Returns dict with counts: absent_logged, partial_updated
+    """
+    scanned = session_data.get('scanned_students', {})
+    result = {'absent_logged': 0, 'partial_updated': 0}
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    with get_db() as conn:
+        for student in required_students:
+            student_number = str(student.get('student_number', ''))
+            scan_info = scanned.get(student_number, {})
+
+            if not scan_info:
+                # Never scanned → Absent
+                conn.execute(
+                    """INSERT INTO attendance_records
+                       (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'Absent', ?, ?)""",
+                    (now, student.get('name', ''), student_number, student.get('course', ''),
+                     student.get('year', ''), student.get('section', ''),
+                     session_id, FINE_ABSENT, 'Absent - did not scan QR')
+                )
+                result['absent_logged'] += 1
+
+            elif scan_info.get('status') == 'in':
+                # Only Time In → Partial scan: fine is only 25 pesos (considered late), not stacked
+                fine = FINE_PARTIAL
+                fine_reason = 'No Time Out recorded (partial scan) - considered late'
+
+                cursor = conn.execute(
+                    """UPDATE attendance_records
+                       SET status = 'Partial (No Time Out)', fine = ?, fine_reason = ?
+                       WHERE session_id = ? AND student_number = ? AND status = 'Time In'""",
+                    (fine, fine_reason, session_id, student_number)
+                )
+                if cursor.rowcount > 0:
+                    result['partial_updated'] += 1
+                else:
+                    # Fallback: insert if no Time In row found
+                    conn.execute(
+                        """INSERT INTO attendance_records
+                           (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, 'Partial (No Time Out)', ?, ?)""",
+                        (now, student.get('name', ''), student_number, student.get('course', ''),
+                         student.get('year', ''), student.get('section', ''),
+                         session_id, fine, fine_reason),
+                    )
+                    result['partial_updated'] += 1
+
+    return result
 
 
 def generate_summary_sheet(filepath: str = None) -> bool:
     """
-    Generate or update a summary sheet with total attendance per student.
+    Generate a summary Excel sheet with total attendance per student.
+    Reads from SQLite and writes to Excel file.
     """
-    wb, filepath = _get_or_create_workbook(filepath)
+    if filepath is None:
+        filepath = ATTENDANCE_LOG_FILE
+
+    records = get_attendance_records()
+    student_records = {}
+
+    for r in records:
+        student_num = str(r.get('student_number', ''))
+        if not student_num:
+            continue
+        if student_num not in student_records:
+            student_records[student_num] = {
+                'name': r.get('name'),
+                'student_number': student_num,
+                'course': r.get('course'),
+                'year': r.get('year'),
+                'section': r.get('section'),
+                'total_sessions': 0,
+                'sessions_attended': [],
+                'total_fines': 0,
+                'absent_count': 0,
+                'late_count': 0,
+            }
+        sess_id = r.get('session_id')
+        if sess_id and sess_id not in student_records[student_num]['sessions_attended']:
+            student_records[student_num]['sessions_attended'].append(sess_id)
+            student_records[student_num]['total_sessions'] += 1
+        fine = r.get('fine') or 0
+        student_records[student_num]['total_fines'] += fine
+        if r.get('status') == 'Absent':
+            student_records[student_num]['absent_count'] += 1
+        elif r.get('status') in ('Late', 'Time In', 'Partial (No Time Out)') and fine:
+            student_records[student_num]['late_count'] += 1
+
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    wb = Workbook()
+    if 'Sheet' in wb.sheetnames:
+        del wb['Sheet']
+
+    summary_headers = [
+        'Student Name', 'Student Number', 'Course', 'Year', 'Section',
+        'Total Sessions', 'Sessions Attended', 'Absent Count',
+        'Late Count', 'Total Fines (PHP)', 'Sessions List'
+    ]
+    summary_widths = [30, 20, 15, 8, 10, 16, 18, 14, 12, 20, 50]
+
     try:
-        # Collect all attendance data
-        student_records = {}
-
-        for sheet_name in wb.sheetnames:
-            if sheet_name == 'Summary':
-                continue
-            ws = wb[sheet_name]
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                if row and row[2]:  # Student Number exists
-                    student_num = str(row[2])
-                    if student_num not in student_records:
-                        student_records[student_num] = {
-                            'name': row[1],
-                            'student_number': student_num,
-                            'course': row[3],
-                            'year': row[4],
-                            'section': row[5],
-                            'total_sessions': 0,
-                            'sessions_attended': []
-                        }
-                    if row[6] not in student_records[student_num]['sessions_attended']:
-                        student_records[student_num]['sessions_attended'].append(row[6])
-                        student_records[student_num]['total_sessions'] += 1
-
-        # Create or recreate summary sheet
-        if 'Summary' in wb.sheetnames:
-            del wb['Summary']
-
         ws = wb.create_sheet(title='Summary', index=0)
-
-        summary_headers = [
-            'Student Name', 'Student Number', 'Course', 'Year', 'Section',
-            'Total Sessions Attended', 'Sessions List'
-        ]
-        summary_widths = [30, 20, 15, 8, 10, 22, 50]
         _style_header_row(ws, summary_headers, summary_widths)
 
         for idx, (student_num, data) in enumerate(sorted(student_records.items()), 2):
             row_data = [
-                data['name'],
-                data['student_number'],
-                data['course'],
-                data['year'],
-                data['section'],
-                data['total_sessions'],
-                ', '.join(str(s) for s in data['sessions_attended'])
+                data['name'], data['student_number'], data['course'], data['year'], data['section'],
+                data['total_sessions'], data['total_sessions'], data['absent_count'], data['late_count'],
+                data['total_fines'], ', '.join(str(s) for s in data['sessions_attended'])
             ]
             for col_idx, value in enumerate(row_data, 1):
                 cell = ws.cell(row=idx, column=col_idx, value=value)
                 cell.border = THIN_BORDER
                 cell.alignment = Alignment(horizontal='center', vertical='center')
+                if col_idx == 10 and value and value > 0:
+                    cell.fill = ABSENT_FILL
+                    cell.font = Font(name='Calibri', bold=True, color='721c24')
 
         wb.save(filepath)
         return True
-
     except Exception as e:
         print(f"Error generating summary: {e}")
         return False
@@ -198,54 +222,31 @@ def generate_summary_sheet(filepath: str = None) -> bool:
 def get_attendance_records(session_id: str = None, student_number: str = None,
                            date_from: str = None, date_to: str = None) -> list:
     """
-    Retrieve attendance records with optional filters.
+    Retrieve attendance records from SQLite with optional filters.
     """
-    records = []
-    if not os.path.exists(ATTENDANCE_LOG_FILE):
-        return records
+    params = []
+    conditions = []
+    if session_id:
+        conditions.append("session_id = ?")
+        params.append(session_id)
+    if student_number:
+        conditions.append("student_number = ?")
+        params.append(student_number)
+    if date_from:
+        conditions.append("recorded_at >= ?")
+        params.append(date_from + " 00:00:00")
+    if date_to:
+        conditions.append("recorded_at <= ?")
+        params.append(date_to + " 23:59:59")
 
-    wb = load_workbook(ATTENDANCE_LOG_FILE)
-    try:
-        for sheet_name in wb.sheetnames:
-            if sheet_name == 'Summary':
-                continue
-            ws = wb[sheet_name]
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                if not row or not row[0]:
-                    continue
+    where = " AND ".join(conditions) if conditions else "1=1"
+    query = f"SELECT recorded_at as datetime, name, student_number, course, year, section, session_id, status, fine, fine_reason FROM attendance_records WHERE {where} ORDER BY recorded_at"
 
-                record = {
-                    'datetime': str(row[0]),
-                    'name': row[1],
-                    'student_number': str(row[2]) if row[2] else '',
-                    'course': row[3],
-                    'year': row[4],
-                    'section': row[5],
-                    'session_id': row[6],
-                    'status': row[7]
-                }
+    with get_db() as conn:
+        cursor = conn.execute(query, params)
+        rows = cursor.fetchall()
 
-                # Apply filters
-                if session_id and record['session_id'] != session_id:
-                    continue
-                if student_number and record['student_number'] != student_number:
-                    continue
-                if date_from:
-                    rec_date = record['datetime'][:10]
-                    if rec_date < date_from:
-                        continue
-                if date_to:
-                    rec_date = record['datetime'][:10]
-                    if rec_date > date_to:
-                        continue
-
-                records.append(record)
-    except Exception as e:
-        print(f"Error retrieving records: {e}")
-    finally:
-        wb.close()
-
-    return records
+    return [dict(r) for r in rows]
 
 
 def get_session_stats(session_id: str) -> dict:
@@ -254,65 +255,73 @@ def get_session_stats(session_id: str) -> dict:
     courses = {}
     time_in_count = 0
     time_out_count = 0
+    absent_count = 0
+    total_fines = 0
     for r in records:
-        key = f"{r['course']} {r['year']}-{r['section']}"
+        key = f"{r.get('course', '')} {r.get('year', '')}-{r.get('section', '')}"
         courses[key] = courses.get(key, 0) + 1
-        if r.get('status') == 'Time In':
+        status = r.get('status', '')
+        if status == 'Time In':
             time_in_count += 1
-        elif r.get('status') == 'Time Out':
+        elif status == 'Time Out':
             time_out_count += 1
+        elif status == 'Absent':
+            absent_count += 1
+        total_fines += r.get('fine') or 0
 
     return {
         'total_present': len(records),
         'time_in_count': time_in_count,
         'time_out_count': time_out_count,
+        'absent_count': absent_count,
+        'total_fines': total_fines,
         'by_course': courses,
         'records': records
     }
 
 
 def create_sample_master_list(filepath: str = None) -> str:
-    """
-    Create a sample Excel master list with student data for testing.
-    """
+    """Create a sample Excel master list with student data for testing."""
     if filepath is None:
         filepath = os.path.join(EXCEL_DIR, 'sample_master_list.xlsx')
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Students"
-
-    headers = ['Name', 'Student Number', 'Course', 'Year', 'Section']
-    widths = [30, 20, 15, 8, 10]
+    headers = ['Name', 'Student Number', 'Course', 'Year', 'Section', 'School Year']
+    widths = [30, 20, 15, 8, 10, 15]
     _style_header_row(ws, headers, widths)
+
+    sample_students = [
+        ['Juan Dela Cruz', '2024-00001', 'BSCS', '3', 'A', '2024-2025'],
+        ['Maria Santos', '2024-00002', 'BSCS', '3', 'A', '2024-2025'],
+        ['Jose Rizal Jr.', '2024-00003', 'BSIT', '2', 'B', '2024-2025'],
+        ['Ana Reyes', '2024-00004', 'BSIT', '2', 'B', '2024-2025'],
+        ['Carlos Garcia', '2024-00005', 'BSCS', '1', 'A', '2024-2025'],
+        ['Elena Cruz', '2024-00006', 'BSCE', '4', 'A', '2024-2025'],
+        ['Miguel Torres', '2024-00007', 'BSCS', '3', 'B', '2024-2025'],
+        ['Sofia Bautista', '2024-00008', 'BSIT', '1', 'A', '2024-2025'],
+        ['Rafael Mendoza', '2024-00009', 'BSCS', '2', 'A', '2024-2025'],
+        ['Isabella Flores', '2024-00010', 'BSCE', '3', 'A', '2024-2025'],
+    ]
+
+    for row_idx, student in enumerate(sample_students, 2):
+        for col_idx, value in enumerate(student, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.border = THIN_BORDER
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+
     try:
-        ws = wb.active
-        ws.title = "Students"
-
-        headers = ['Name', 'Student Number', 'Course', 'Year', 'Section']
-        widths = [30, 20, 15, 8, 10]
-        _style_header_row(ws, headers, widths)
-
-        sample_students = [
-            ['Juan Dela Cruz', '2024-00001', 'BSCS', '3', 'A'],
-            ['Maria Santos', '2024-00002', 'BSCS', '3', 'A'],
-            ['Jose Rizal Jr.', '2024-00003', 'BSIT', '2', 'B'],
-            ['Ana Reyes', '2024-00004', 'BSIT', '2', 'B'],
-            ['Carlos Garcia', '2024-00005', 'BSCS', '1', 'A'],
-            ['Elena Cruz', '2024-00006', 'BSCE', '4', 'A'],
-            ['Miguel Torres', '2024-00007', 'BSCS', '3', 'B'],
-            ['Sofia Bautista', '2024-00008', 'BSIT', '1', 'A'],
-            ['Rafael Mendoza', '2024-00009', 'BSCS', '2', 'A'],
-            ['Isabella Flores', '2024-00010', 'BSCE', '3', 'A'],
-        ]
-
-        for row_idx, student in enumerate(sample_students, 2):
-            for col_idx, value in enumerate(student, 1):
-                cell = ws.cell(row=row_idx, column=col_idx, value=value)
-                cell.border = THIN_BORDER
-                cell.alignment = Alignment(horizontal='center', vertical='center')
-
         wb.save(filepath)
     finally:
         wb.close()
     return filepath
+
+
+def clear_attendance_records() -> int:
+    """Clear all attendance records from the database. Returns count deleted."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM attendance_records")
+        count = cursor.fetchone()[0]
+        conn.execute("DELETE FROM attendance_records")
+    return count

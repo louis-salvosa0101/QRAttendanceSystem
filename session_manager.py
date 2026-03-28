@@ -1,32 +1,62 @@
 """
 Session management for class attendance sessions.
 Each session has a unique ID, creation time, and expiration.
-Sessions are stored in a JSON file for simplicity (offline-first).
+Sessions are stored in SQLite for ACID compliance and durability.
 """
 import json
-import os
 import secrets
 import string
 from datetime import datetime, timedelta
-from config import SESSIONS_FILE, SESSION_DURATION_HOURS
+
+from config import (SESSION_DURATION_HOURS, FINE_LATE, FINE_ABSENT,
+                    FINE_PARTIAL, LATE_THRESHOLD_MINUTES)
+from db import get_db, _row_to_dict
 
 
-def _load_sessions() -> dict:
-    """Load sessions from JSON file."""
-    if os.path.exists(SESSIONS_FILE):
-        with open(SESSIONS_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+def _session_row_to_dict(row, scanned_students: dict = None) -> dict:
+    """Convert session row to full session dict with scanned_students."""
+    if not row:
+        return None
+    d = dict(row)
+    required_year = d.get('required_year')
+    if isinstance(required_year, str) and required_year:
+        try:
+            d['required_year'] = json.loads(required_year)
+        except json.JSONDecodeError:
+            d['required_year'] = []
+    else:
+        d['required_year'] = required_year or []
+
+    d['scanned_students'] = scanned_students if scanned_students is not None else {}
+    d['attendance_count'] = len(d['scanned_students'])
+    return d
 
 
-def _save_sessions(sessions: dict):
-    """Save sessions to JSON file."""
-    os.makedirs(os.path.dirname(SESSIONS_FILE), exist_ok=True)
-    with open(SESSIONS_FILE, 'w') as f:
-        json.dump(sessions, f, indent=2, default=str)
+def _load_scanned_students(conn, session_id: str) -> dict:
+    """Load scanned students for a session as {student_number: {status, time_in, time_out, fine, fine_reason}}."""
+    cursor = conn.execute(
+        """SELECT student_number, status, time_in, time_out, fine, fine_reason
+           FROM session_scans WHERE session_id = ?""",
+        (session_id,)
+    )
+    rows = cursor.fetchall()
+    result = {}
+    for r in rows:
+        result[r['student_number']] = {
+            'status': r['status'],
+            'time_in': r['time_in'],
+            'time_out': r['time_out'],
+            'fine': r['fine'] or 0,
+            'fine_reason': r['fine_reason'] or '',
+        }
+    return result
 
 
-def create_session(subject: str = "", teacher: str = "", notes: str = "", duration_hours: float = None) -> dict:
+def create_session(subject: str = "", teacher: str = "", notes: str = "",
+                   duration_hours: float = None,
+                   required_course: str = "",
+                   required_year: list = None,
+                   required_section: str = "") -> dict:
     """
     Create a new attendance session.
     Returns the session data including the unique session ID.
@@ -34,57 +64,85 @@ def create_session(subject: str = "", teacher: str = "", notes: str = "", durati
     if duration_hours is None:
         duration_hours = SESSION_DURATION_HOURS
 
-    # Generate a unique, readable session token
     token_chars = string.ascii_uppercase + string.digits
     session_id = ''.join(secrets.choice(token_chars) for _ in range(8))
 
     now = datetime.now()
-    session = {
-        'session_id': session_id,
-        'subject': subject,
-        'teacher': teacher,
-        'notes': notes,
-        'created_at': now.isoformat(),
-        'expires_at': (now + timedelta(hours=float(duration_hours))).isoformat(),
-        'is_active': True,
-        'scanned_students': {},  # Dict: {student_number: 'in' or 'out'}
-        'attendance_count': 0
-    }
+    expires_at = now + timedelta(hours=float(duration_hours))
+    required_year_json = json.dumps(required_year or [])
 
-    sessions = _load_sessions()
-    sessions[session_id] = session
-    _save_sessions(sessions)
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO sessions (session_id, subject, teacher, notes, created_at, expires_at,
+               is_active, required_course, required_year, required_section)
+               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+            (session_id, subject, teacher, notes, now.isoformat(), expires_at.isoformat(),
+             required_course, required_year_json, required_section)
+        )
 
+    session = get_session(session_id)
     return session
 
 
-def get_session(session_id: str) -> dict:
+def get_session(session_id: str) -> dict | None:
     """Get a session by its ID."""
-    sessions = _load_sessions()
-    return sessions.get(session_id)
+    with get_db() as conn:
+        cursor = conn.execute(
+            """SELECT session_id, subject, teacher, notes, created_at, expires_at,
+               is_active, required_course, required_year, required_section
+               FROM sessions WHERE session_id = ?""",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        scanned = _load_scanned_students(conn, session_id)
+        return _session_row_to_dict(row, scanned)
 
 
 def get_active_sessions() -> list:
     """Get all currently active sessions."""
-    sessions = _load_sessions()
     now = datetime.now()
-    active = []
-    for sid, session in sessions.items():
-        expires_at = datetime.fromisoformat(session['expires_at'])
-        if session['is_active'] and now < expires_at:
-            active.append(session)
-        elif session['is_active'] and now >= expires_at:
-            # Auto-expire
-            session['is_active'] = False
-            sessions[sid] = session
-    _save_sessions(sessions)
-    return active
+    with get_db() as conn:
+        # Auto-expire sessions that have passed
+        conn.execute(
+            """UPDATE sessions SET is_active = 0
+               WHERE is_active = 1 AND expires_at <= ?""",
+            (now.isoformat(),)
+        )
+
+        cursor = conn.execute(
+            """SELECT session_id, subject, teacher, notes, created_at, expires_at,
+               is_active, required_course, required_year, required_section
+               FROM sessions WHERE is_active = 1 AND expires_at > ?""",
+            (now.isoformat(),)
+        )
+        rows = cursor.fetchall()
+
+    result = []
+    for row in rows:
+        session = get_session(row['session_id'])
+        if session:
+            result.append(session)
+    return result
 
 
 def get_all_sessions() -> list:
     """Get all sessions (active and expired)."""
-    sessions = _load_sessions()
-    return list(sessions.values())
+    with get_db() as conn:
+        cursor = conn.execute(
+            """SELECT session_id, subject, teacher, notes, created_at, expires_at,
+               is_active, required_course, required_year, required_section
+               FROM sessions ORDER BY created_at DESC"""
+        )
+        rows = cursor.fetchall()
+
+    result = []
+    for row in rows:
+        session = get_session(row['session_id'])
+        if session:
+            result.append(session)
+    return result
 
 
 def validate_session(session_id: str) -> tuple:
@@ -96,16 +154,17 @@ def validate_session(session_id: str) -> tuple:
     if not session:
         return False, "Session not found."
 
-    if not session['is_active']:
+    if not session.get('is_active'):
         return False, "Session has been closed."
 
     now = datetime.now()
     expires_at = datetime.fromisoformat(session['expires_at'])
     if now >= expires_at:
-        session['is_active'] = False
-        sessions = _load_sessions()
-        sessions[session_id] = session
-        _save_sessions(sessions)
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE sessions SET is_active = 0 WHERE session_id = ?",
+                (session_id,)
+            )
         return False, "Session has expired."
 
     return True, "Session is active."
@@ -114,60 +173,84 @@ def validate_session(session_id: str) -> tuple:
 def record_student_scan(session_id: str, student_number: str) -> tuple:
     """
     Record a student scan in the session with Time In / Time Out logic.
-    - 1st scan = Time In
-    - 2nd scan = Time Out
-    - 3rd+ scan = Rejected (already completed)
-    Returns (success, message, scan_type).
-    scan_type is 'time_in', 'time_out', or None on failure.
+    Returns (success, message, scan_type, fine_amount, fine_reason).
     """
-    sessions = _load_sessions()
-    session = sessions.get(session_id)
-
+    session = get_session(session_id)
     if not session:
-        return False, "Session not found.", None
+        return False, "Session not found.", None, 0, ''
 
-    scanned = session['scanned_students']
-
-    # Backward compatibility: convert old list format to dict
-    if isinstance(scanned, list):
-        scanned = {s: 'in' for s in scanned}
-        session['scanned_students'] = scanned
+    scanned = session.get('scanned_students', {})
+    now = datetime.now()
+    now_iso = now.isoformat()
 
     if student_number not in scanned:
         # First scan → Time In
-        scanned[student_number] = 'in'
-        session['scanned_students'] = scanned
-        session['attendance_count'] = len(scanned)
-        sessions[session_id] = session
-        _save_sessions(sessions)
-        return True, "Time In recorded.", 'time_in'
+        session_start = datetime.fromisoformat(session['created_at'])
+        minutes_late = (now - session_start).total_seconds() / 60
+        fine = FINE_LATE if minutes_late > LATE_THRESHOLD_MINUTES else 0
+        fine_reason = f'Late by {int(minutes_late)} min (>{LATE_THRESHOLD_MINUTES} min threshold)' if fine else ''
 
-    elif scanned[student_number] == 'in':
+        with get_db() as conn:
+            conn.execute(
+                """INSERT INTO session_scans (session_id, student_number, status, time_in, time_out, fine, fine_reason)
+                   VALUES (?, ?, 'in', ?, NULL, ?, ?)""",
+                (session_id, student_number, now_iso, fine, fine_reason)
+            )
+        return True, "Time In recorded.", 'time_in', fine, fine_reason
+
+    elif scanned[student_number]['status'] == 'in':
         # Second scan → Time Out
-        scanned[student_number] = 'out'
-        session['scanned_students'] = scanned
-        sessions[session_id] = session
-        _save_sessions(sessions)
-        return True, "Time Out recorded.", 'time_out'
+        with get_db() as conn:
+            conn.execute(
+                """UPDATE session_scans SET status = 'out', time_out = ?
+                   WHERE session_id = ? AND student_number = ?""",
+                (now_iso, session_id, student_number)
+            )
+        info = scanned[student_number]
+        return True, "Time Out recorded.", 'time_out', info.get('fine', 0), info.get('fine_reason', '')
 
     else:
         # Already timed out
-        return False, "Student already timed in and timed out for this session.", None
+        return False, "Student already timed in and timed out for this session.", None, 0, ''
+
+
+def get_student_scan_info(session_id: str, student_number: str) -> dict:
+    """Get the scan info for a student in a session."""
+    session = get_session(session_id)
+    if not session:
+        return {}
+    return session.get('scanned_students', {}).get(student_number, {})
 
 
 def close_session(session_id: str) -> tuple:
     """
     Manually close a session.
-    Returns (success, message).
+    Also marks students who only Time In (no Time Out) with FINE_PARTIAL.
     """
-    sessions = _load_sessions()
-    session = sessions.get(session_id)
-
+    session = get_session(session_id)
     if not session:
         return False, "Session not found."
 
-    session['is_active'] = False
-    sessions[session_id] = session
-    _save_sessions(sessions)
+    with get_db() as conn:
+        scanned = session.get('scanned_students', {})
+        for student_number, info in scanned.items():
+            if info.get('status') == 'in':
+                # Partial scan: fine is only FINE_PARTIAL (25 pesos), not stacked with late fine
+                current_fine = FINE_PARTIAL
+                partial_reason = 'No Time Out recorded (partial scan) - considered late'
+                conn.execute(
+                    """UPDATE session_scans SET fine = ?, fine_reason = ?
+                       WHERE session_id = ? AND student_number = ?""",
+                    (current_fine, partial_reason, session_id, student_number)
+                )
+        conn.execute("UPDATE sessions SET is_active = 0 WHERE session_id = ?", (session_id,))
 
     return True, "Session closed successfully."
+
+
+def clear_all_sessions() -> int:
+    """Clear all sessions from the database. Returns count deleted."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM session_scans")
+        cursor = conn.execute("DELETE FROM sessions")
+        return cursor.rowcount
