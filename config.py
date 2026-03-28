@@ -2,16 +2,36 @@
 Configuration settings for the QR Attendance System.
 """
 import os
-import secrets
+import sys
+import base64
+
+from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+
+def _require_env(name):
+    value = os.environ.get(name)
+    if not value or value == 'change-me':
+        sys.exit(
+            f"[ERROR] {name} is not set. "
+            f"Copy .env.example to .env and fill in your values."
+        )
+    return value
+
 
 # Flask
-SECRET_KEY = secrets.token_hex(32)
+SECRET_KEY = _require_env('SECRET_KEY')
 
-# AES Encryption Key (32 bytes for AES-256) - Change this in production!
-AES_KEY = b'QRAttendSys2024!SecureKey32Bytes'  # Exactly 32 bytes
-AES_IV = b'InitVector16Byte'  # Exactly 16 bytes
+# AES Encryption (base64-encoded in .env, decoded to raw bytes here)
+AES_KEY = base64.b64decode(_require_env('AES_KEY'))   # Must be 32 bytes
+AES_IV = base64.b64decode(_require_env('AES_IV'))     # Must be 16 bytes
+
+if len(AES_KEY) != 32:
+    sys.exit(f"[ERROR] AES_KEY must decode to exactly 32 bytes, got {len(AES_KEY)}")
+if len(AES_IV) != 16:
+    sys.exit(f"[ERROR] AES_IV must decode to exactly 16 bytes, got {len(AES_IV)}")
 
 # Directories
 QR_CODES_DIR = os.path.join(BASE_DIR, 'static', 'qrcodes')

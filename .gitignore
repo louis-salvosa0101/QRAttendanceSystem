@@ -1,0 +1,20 @@
+# Environment & secrets
+.env
+
+# Virtual environment
+.venv/
+venv/
+
+# Database & generated data
+data/
+uploads/
+static/qrcodes/*.png
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db

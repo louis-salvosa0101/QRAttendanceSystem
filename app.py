@@ -800,13 +800,42 @@ def server_error(e):
 
 # ─── RUN ─────────────────────────────────────────────────────────────────
 
+def start_ngrok(port):
+    """Start an ngrok tunnel for mobile access over HTTPS."""
+    try:
+        from pyngrok import ngrok
+        public_url = ngrok.connect(port, "http").public_url
+        print("\n" + "*" * 60)
+        print("  NGROK TUNNEL ACTIVE")
+        print(f"  Public URL: {public_url}")
+        https_url = public_url.replace("http://", "https://")
+        if public_url != https_url:
+            print(f"  HTTPS URL:  {https_url}")
+        print("  Use this URL on your phone to access the system")
+        print("*" * 60 + "\n")
+        return public_url
+    except ImportError:
+        print("  [!] pyngrok not installed. Run: pip install pyngrok")
+        return None
+    except Exception as e:
+        print(f"  [!] ngrok failed to start: {e}")
+        print("  [!] Make sure you've set your authtoken:")
+        print("      ngrok config add-authtoken YOUR_TOKEN")
+        return None
+
+
+USE_NGROK = os.environ.get('USE_NGROK', '1') == '1'
+
 if __name__ == '__main__':
+    port = 5000
     print("\n" + "=" * 60)
     print("  QR Attendance System")
-    print("  Open http://127.0.0.1:5000 in your browser")
-    print("=" * 60 + "\n")
-    # FOR MOBILE ACCESS
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print(f"  Local URL:   http://127.0.0.1:{port}")
+    print("=" * 60)
 
-    # FOR LOCAL ACCESS
-    #app.run(debug=True, host='127.0.0.1', port=5000)
+    if USE_NGROK:
+        start_ngrok(port)
+    else:
+        print("  Set USE_NGROK=1 to enable ngrok tunnel for mobile\n")
+
+    app.run(debug=True, host='0.0.0.0', port=port, use_reloader=False)
