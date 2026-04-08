@@ -30,7 +30,7 @@ from student_registry import (register_student, register_students_bulk,
                                clear_registry, get_registry_stats)
 
 from db import init_db
-from auth import login_manager, authenticate, seed_default_admin
+from auth import login_manager, authenticate, seed_default_admin, hash_password
 
 init_db()
 seed_default_admin()
@@ -78,6 +78,41 @@ def logout():
     """Log out the current officer."""
     logout_user()
     return redirect(url_for('login'))
+
+
+@app.route('/api/change-password', methods=['POST'])
+@login_required
+def api_change_password():
+    """Change the current officer's password."""
+    import bcrypt
+    data = request.get_json() or {}
+    current_password = data.get('current_password', '')
+    new_password = data.get('new_password', '')
+    confirm_password = data.get('confirm_password', '')
+
+    if not current_password or not new_password or not confirm_password:
+        return jsonify({'success': False, 'message': 'All fields are required.'}), 400
+
+    if new_password != confirm_password:
+        return jsonify({'success': False, 'message': 'New passwords do not match.'}), 400
+
+    if len(new_password) < 6:
+        return jsonify({'success': False, 'message': 'New password must be at least 6 characters.'}), 400
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT password_hash FROM officers WHERE id = %s", (current_user.id,))
+        row = cur.fetchone()
+
+        if not row or not bcrypt.checkpw(current_password.encode('utf-8'),
+                                          row['password_hash'].encode('utf-8')):
+            return jsonify({'success': False, 'message': 'Current password is incorrect.'}), 403
+
+        new_hash = hash_password(new_password)
+        cur.execute("UPDATE officers SET password_hash = %s WHERE id = %s",
+                    (new_hash, current_user.id))
+
+    return jsonify({'success': True, 'message': 'Password changed successfully.'})
 
 
 # ─── PAGES ───────────────────────────────────────────────────────────────
