@@ -13,53 +13,71 @@
 
 <!-- Student Info Card -->
 <div class="card mb-3">
-    <div class="card-body" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
-        <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;color:white;flex-shrink:0;">
-            {{ student.name.split(' ')|map('first')|join('')|truncate(2, True, '')|upper }}
-        </div>
-        <div style="flex:1;min-width:200px;">
-            <h2 style="font-size:22px;font-weight:700;margin-bottom:4px;">{{ student.name }}</h2>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--text-secondary);">
-                <span style="display:flex;align-items:center;gap:6px;">
-                    <i data-lucide="hash" style="width:14px;height:14px;color:var(--accent-primary);"></i>
-                    <span style="font-family:'JetBrains Mono',monospace;">{{ student.student_number }}</span>
-                </span>
-                <span style="display:flex;align-items:center;gap:6px;">
-                    <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--accent-primary);"></i>
-                    {{ student.course or '—' }}
-                </span>
-                <span style="display:flex;align-items:center;gap:6px;">
-                    <i data-lucide="layers" style="width:14px;height:14px;color:var(--accent-primary);"></i>
-                    Year {{ student.year or '—' }} - Section {{ student.section or '—' }}
-                </span>
+    <div class="card-body">
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+            <div style="width:56px;height:56px;border-radius:var(--radius-md);background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:white;flex-shrink:0;">
+                {{ student.name.split(' ')|map('first')|join('')|truncate(2, True, '')|upper }}
+            </div>
+            <div style="flex:1;min-width:200px;">
+                <h2 style="font-size:20px;font-weight:700;margin-bottom:6px;">{{ student.name }}</h2>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--text-secondary);">
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <i data-lucide="hash" style="width:14px;height:14px;color:var(--accent-primary);"></i>
+                        <span style="font-family:'Fira Code',monospace;">{{ student.student_number }}</span>
+                    </span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--accent-primary);"></i>
+                        {{ student.course or '---' }}
+                    </span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <i data-lucide="layers" style="width:14px;height:14px;color:var(--accent-primary);"></i>
+                        Year {{ student.year or '---' }} - Section {{ student.section or '---' }}
+                    </span>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Stats Row -->
-<div class="stats-grid mb-3" style="grid-template-columns:repeat(4,1fr);">
+<div class="stats-grid mb-3" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
     <div class="stat-card purple">
-        <div class="stat-icon"><i data-lucide="calendar-check"></i></div>
-        <div class="stat-value">{{ summary.total_sessions }}</div>
-        <div class="stat-label">Total Sessions</div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value">{{ summary.total_sessions }}</div>
+                <div class="stat-label">Total Sessions</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="calendar-check"></i></div>
+        </div>
     </div>
     <div class="stat-card green">
-        <div class="stat-icon"><i data-lucide="user-x"></i></div>
-        <div class="stat-value">{{ summary.absent_count }}</div>
-        <div class="stat-label">Absences</div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value">{{ summary.absent_count }}</div>
+                <div class="stat-label">Absences</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="user-x"></i></div>
+        </div>
     </div>
     <div class="stat-card amber">
-        <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
-        <div class="stat-value">{{ summary.late_count }}</div>
-        <div class="stat-label">Fines Incurred</div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value">{{ summary.late_count }}</div>
+                <div class="stat-label">Fines Incurred</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
+        </div>
     </div>
     <div class="stat-card blue">
-        <div class="stat-icon"><i data-lucide="philippine-peso"></i></div>
-        <div class="stat-value" style="color:{% if summary.total_fines > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">
-            ₱{{ summary.total_fines }}
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value" style="color:{% if summary.total_fines > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">
+                    {{ summary.total_fines }}
+                </div>
+                <div class="stat-label">Total Fines (PHP)</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="philippine-peso"></i></div>
         </div>
-        <div class="stat-label">Total Fines</div>
     </div>
 </div>
 
@@ -90,7 +108,7 @@
                     <tbody>
                         {% for f in fines_list %}
                         <tr>
-                            <td style="font-size:13px;font-family:'JetBrains Mono',monospace;">{{ f.date[:16] }}</td>
+                            <td style="font-size:13px;font-family:'Fira Code',monospace;">{{ f.date[:16] }}</td>
                             <td><span class="badge badge-info">{{ f.session_id }}</span></td>
                             <td>
                                 {% if f.status == 'Absent' %}
@@ -185,7 +203,7 @@
                 <tbody>
                     {% for r in records|reverse %}
                     <tr>
-                        <td style="font-size:13px;font-family:'JetBrains Mono',monospace;">{{ r.datetime }}</td>
+                        <td style="font-size:13px;font-family:'Fira Code',monospace;">{{ r.datetime }}</td>
                         <td><span class="badge badge-info">{{ r.session_id }}</span></td>
                         <td>
                             {% if r.status == 'Time In' %}

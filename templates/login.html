@@ -6,54 +6,54 @@
     <title>Login - QR Attendance System</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
         :root {
-            --bg-primary: #0a0a1a;
-            --bg-secondary: #111128;
-            --bg-card: #16163a;
-            --bg-input: #1a1a3e;
-            --accent-primary: #6c63ff;
-            --accent-secondary: #a78bfa;
-            --accent-glow: rgba(108, 99, 255, 0.3);
+            --bg-primary: #EFF6FF;
+            --bg-card: #ffffff;
+            --bg-input: #f8fafc;
+            --accent-primary: #2563EB;
+            --accent-secondary: #3B82F6;
+            --accent-glow: rgba(37, 99, 235, 0.15);
             --accent-danger: #ef4444;
-            --text-primary: #f0f0ff;
-            --text-secondary: #a0a0cc;
-            --text-muted: #6b6b99;
-            --border: rgba(108, 99, 255, 0.15);
-            --border-hover: rgba(108, 99, 255, 0.35);
+            --text-primary: #1E40AF;
+            --text-secondary: #334155;
+            --text-muted: #64748B;
+            --border: #E2E8F0;
+            --border-hover: #CBD5E1;
             --radius-sm: 8px;
-            --radius-md: 12px;
             --radius-lg: 16px;
             --radius-xl: 20px;
-            --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --shadow-lg: 0 10px 25px rgba(0,0,0,0.08);
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        :root.dark-theme {
+            --bg-primary: #0f172a;
+            --bg-card: #1e293b;
+            --bg-input: #0f172a;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #60a5fa;
+            --accent-glow: rgba(59, 130, 246, 0.2);
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --border-hover: #475569;
+            --shadow-lg: 0 10px 25px rgba(0,0,0,0.4);
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Fira Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background:
-                radial-gradient(ellipse at 20% 20%, rgba(108, 99, 255, 0.08) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 80%, rgba(167, 139, 250, 0.06) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 50%, rgba(59, 130, 246, 0.04) 0%, transparent 60%);
-            z-index: -1;
         }
 
         .login-container {
@@ -67,7 +67,7 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-xl);
             padding: 40px 36px;
-            box-shadow: var(--shadow-lg), 0 0 60px rgba(108, 99, 255, 0.08);
+            box-shadow: var(--shadow-lg);
         }
 
         .login-header {
@@ -83,7 +83,7 @@
             align-items: center;
             justify-content: center;
             margin: 0 auto 20px;
-            box-shadow: 0 0 30px var(--accent-glow);
+            box-shadow: 0 4px 20px var(--accent-glow);
         }
 
         .login-icon i { color: white; width: 32px; height: 32px; }
@@ -100,9 +100,7 @@
             color: var(--text-muted);
         }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+        .form-group { margin-bottom: 20px; }
 
         .form-label {
             display: block;
@@ -119,7 +117,7 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
+            font-family: 'Fira Sans', sans-serif;
             font-size: 14px;
             transition: var(--transition);
             outline: none;
@@ -135,11 +133,11 @@
         .btn-login {
             width: 100%;
             padding: 12px;
-            background: linear-gradient(135deg, var(--accent-primary), #7c73ff);
+            background: #F97316;
             color: white;
             border: none;
             border-radius: var(--radius-sm);
-            font-family: 'Inter', sans-serif;
+            font-family: 'Fira Sans', sans-serif;
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
@@ -148,12 +146,11 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
-            box-shadow: 0 4px 15px var(--accent-glow);
         }
 
         .btn-login:hover {
             transform: translateY(-1px);
-            box-shadow: 0 6px 25px var(--accent-glow);
+            opacity: 0.9;
         }
 
         .btn-login:active { transform: translateY(0); }
@@ -161,9 +158,9 @@
         .btn-login i { width: 18px; height: 18px; }
 
         .error-msg {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #f87171;
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            color: var(--accent-danger);
             padding: 12px 16px;
             border-radius: var(--radius-sm);
             font-size: 13px;
@@ -181,9 +178,41 @@
             font-size: 12px;
             color: var(--text-muted);
         }
+
+        .theme-toggle-login {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 36px; height: 36px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .theme-toggle-login:hover {
+            border-color: var(--border-hover);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * { animation: none !important; transition: none !important; }
+        }
+
+        @media (max-width: 480px) {
+            .login-card { padding: 28px 24px; }
+        }
     </style>
 </head>
 <body>
+    <button class="theme-toggle-login" onclick="toggleTheme()" aria-label="Toggle theme">
+        <i data-lucide="moon" id="theme-icon"></i>
+    </button>
+
     <div class="login-container">
         <div class="login-card">
             <div class="login-header">
@@ -224,6 +253,30 @@
             </div>
         </div>
     </div>
-    <script>lucide.createIcons();</script>
+    <script>
+        function initTheme() {
+            const saved = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (saved === 'dark' || (!saved && prefersDark)) {
+                document.documentElement.classList.add('dark-theme');
+            }
+            updateIcon();
+        }
+        function toggleTheme() {
+            document.documentElement.classList.toggle('dark-theme');
+            const isDark = document.documentElement.classList.contains('dark-theme');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateIcon();
+        }
+        function updateIcon() {
+            const icon = document.getElementById('theme-icon');
+            if (icon) {
+                icon.setAttribute('data-lucide', document.documentElement.classList.contains('dark-theme') ? 'sun' : 'moon');
+                lucide.createIcons();
+            }
+        }
+        initTheme();
+        lucide.createIcons();
+    </script>
 </body>
 </html>

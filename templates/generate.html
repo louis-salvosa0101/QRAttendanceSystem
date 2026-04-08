@@ -69,7 +69,7 @@
                     <i data-lucide="info"></i>
                     <div>
                         <strong>Excel Format Required:</strong><br>
-                        Columns: <code style="font-family:'JetBrains Mono',monospace;font-size:12px;background:rgba(59,130,246,0.2);padding:2px 6px;border-radius:4px;">
+                        Columns: <code style="font-family:'Fira Code',monospace;font-size:12px;background:rgba(59,130,246,0.2);padding:2px 6px;border-radius:4px;">
                         Name | Student Number | Course | Year | Section</code>
                     </div>
                 </div>
@@ -119,35 +119,41 @@
                     Security Features
                 </div>
             </div>
-            <div class="card-body">
-                <div style="display:flex;flex-direction:column;gap:12px;">
-                    <div style="display:flex;align-items:flex-start;gap:10px;">
-                        <i data-lucide="lock" style="width:18px;height:18px;color:var(--accent-success);flex-shrink:0;margin-top:2px;"></i>
-                        <div>
-                            <div style="font-size:14px;font-weight:600;color:var(--text-primary);">AES-256 Encryption</div>
-                            <div style="font-size:12px;color:var(--text-muted);">QR data is encrypted to prevent tampering or manual editing.</div>
-                        </div>
+            <div class="card-body" style="padding:0;">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);">
+                    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i data-lucide="lock" style="width:16px;height:16px;color:var(--accent-success);"></i>
                     </div>
-                    <div style="display:flex;align-items:flex-start;gap:10px;">
-                        <i data-lucide="fingerprint" style="width:18px;height:18px;color:var(--accent-success);flex-shrink:0;margin-top:2px;"></i>
-                        <div>
-                            <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Integrity Hash</div>
-                            <div style="font-size:12px;color:var(--text-muted);">SHA-256 hash ensures data hasn't been modified.</div>
-                        </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">AES-256 Encryption</div>
+                        <div style="font-size:12px;color:var(--text-muted);">QR data is encrypted to prevent tampering.</div>
                     </div>
-                    <div style="display:flex;align-items:flex-start;gap:10px;">
-                        <i data-lucide="ban" style="width:18px;height:18px;color:var(--accent-success);flex-shrink:0;margin-top:2px;"></i>
-                        <div>
-                            <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Duplicate Prevention</div>
-                            <div style="font-size:12px;color:var(--text-muted);">Each student can only be scanned once per session.</div>
-                        </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);">
+                    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i data-lucide="fingerprint" style="width:16px;height:16px;color:var(--accent-success);"></i>
                     </div>
-                    <div style="display:flex;align-items:flex-start;gap:10px;">
-                        <i data-lucide="timer" style="width:18px;height:18px;color:var(--accent-success);flex-shrink:0;margin-top:2px;"></i>
-                        <div>
-                            <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Session Expiry</div>
-                            <div style="font-size:12px;color:var(--text-muted);">Sessions automatically expire after the configured duration.</div>
-                        </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Integrity Hash</div>
+                        <div style="font-size:12px;color:var(--text-muted);">SHA-256 hash ensures data integrity.</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);">
+                    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i data-lucide="ban" style="width:16px;height:16px;color:var(--accent-success);"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Duplicate Prevention</div>
+                        <div style="font-size:12px;color:var(--text-muted);">One scan per student per session.</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 24px;">
+                    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i data-lucide="timer" style="width:16px;height:16px;color:var(--accent-success);"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Session Expiry</div>
+                        <div style="font-size:12px;color:var(--text-muted);">Auto-expire after configured duration.</div>
                     </div>
                 </div>
             </div>

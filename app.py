@@ -791,7 +791,7 @@ def api_download_records():
                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
     from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment, PatternFill
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
     wb = Workbook()
     ws = wb.active
@@ -807,7 +807,10 @@ def api_download_records():
         cell.font = header_font
         cell.alignment = Alignment(horizontal='center')
 
+    total_fines = 0
     for r in records:
+        fine_val = r['fine'] if r['fine'] else 0
+        total_fines += fine_val
         ws.append([
             r['datetime'],
             r['name'],
@@ -817,9 +820,70 @@ def api_download_records():
             r['section'],
             r['session_id'],
             r['status'],
-            r['fine'] if r['fine'] else 0,
+            fine_val,
             r.get('fine_reason', '')
         ])
+
+    total_row = len(records) + 2
+    ws.append([])
+    total_row += 1
+    ws.cell(row=total_row, column=8, value='TOTAL FINES:').font = Font(bold=True, size=12)
+    ws.cell(row=total_row, column=8).alignment = Alignment(horizontal='right')
+    ws.cell(row=total_row, column=9, value=total_fines).font = Font(bold=True, size=12, color='C00000')
+    ws.cell(row=total_row, column=9).alignment = Alignment(horizontal='center')
+
+    summary_sheet = wb.create_sheet(title="Summary")
+    student_data = {}
+    for r in records:
+        sn = r['student_number']
+        if sn not in student_data:
+            student_data[sn] = {
+                'name': r['name'], 'student_number': sn,
+                'course': r['course'], 'year': r['year'], 'section': r['section'],
+                'total_fines': 0, 'absent': 0, 'late': 0, 'present': 0,
+            }
+        fine_val = r['fine'] if r['fine'] else 0
+        student_data[sn]['total_fines'] += fine_val
+        status = r.get('status', '')
+        if status == 'Absent':
+            student_data[sn]['absent'] += 1
+        elif status in ('Late', 'Partial (No Time Out)') or (status == 'Time In' and fine_val > 0):
+            student_data[sn]['late'] += 1
+        else:
+            student_data[sn]['present'] += 1
+
+    sum_headers = ['Name', 'Student Number', 'Course', 'Year', 'Section',
+                   'Present', 'Late', 'Absent', 'Total Fines (PHP)']
+    summary_sheet.append(sum_headers)
+    sum_fill = PatternFill(start_color="2E75B6", end_color="2E75B6", fill_type="solid")
+    sum_font = Font(color="FFFFFF", bold=True)
+    for cell in summary_sheet[1]:
+        cell.fill = sum_fill
+        cell.font = sum_font
+        cell.alignment = Alignment(horizontal='center')
+
+    fine_fill = PatternFill(start_color="f8d7da", end_color="f8d7da", fill_type="solid")
+    fine_font = Font(bold=True, color='721c24')
+    for sd in sorted(student_data.values(), key=lambda x: x['name']):
+        summary_sheet.append([
+            sd['name'], sd['student_number'], sd['course'], sd['year'], sd['section'],
+            sd['present'], sd['late'], sd['absent'], sd['total_fines'],
+        ])
+        row_num = summary_sheet.max_row
+        fine_cell = summary_sheet.cell(row=row_num, column=9)
+        if sd['total_fines'] > 0:
+            fine_cell.fill = fine_fill
+            fine_cell.font = fine_font
+
+    grand_row = summary_sheet.max_row + 2
+    summary_sheet.cell(row=grand_row, column=8, value='GRAND TOTAL:').font = Font(bold=True, size=12)
+    summary_sheet.cell(row=grand_row, column=8).alignment = Alignment(horizontal='right')
+    summary_sheet.cell(row=grand_row, column=9, value=total_fines).font = Font(bold=True, size=13, color='C00000')
+    summary_sheet.cell(row=grand_row, column=9).alignment = Alignment(horizontal='center')
+
+    sum_widths = [30, 20, 15, 8, 10, 10, 10, 10, 20]
+    for i, w in enumerate(sum_widths, 1):
+        summary_sheet.column_dimensions[chr(64 + i)].width = w
 
     out = io.BytesIO()
     wb.save(out)
