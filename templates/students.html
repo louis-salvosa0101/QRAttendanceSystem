@@ -226,9 +226,11 @@
                 </thead>
                 <tbody id="studentsTableBody">
                     {% for student in students %}
-                    <tr id="row-{{ loop.index }}">
+                    <tr id="row-{{ loop.index }}" style="cursor:pointer;" onclick="window.location='/students/{{ student.student_number }}'">
                         <td style="color:var(--text-muted);">{{ loop.index }}</td>
-                        <td style="font-weight:600;color:var(--text-primary);">{{ student.name }}</td>
+                        <td style="font-weight:600;color:var(--accent-primary);">
+                            <a href="/students/{{ student.student_number }}" style="color:inherit;text-decoration:none;" onclick="event.stopPropagation();">{{ student.name }}</a>
+                        </td>
                         <td style="font-family:'JetBrains Mono',monospace;">{{ student.student_number }}</td>
                         <td>{{ student.course or '—' }}</td>
                         <td>{{ student.year or '—' }}</td>

@@ -1,40 +1,40 @@
 """
 Student Registry module.
-Stores all registered students in SQLite so the system can:
+Stores all registered students in PostgreSQL (Supabase) so the system can:
   - Mark absent students when a session closes
   - Apply fines correctly
   - Filter required school year / courses per session
 """
-from db import get_db, _row_to_dict
+from db import get_db, _cur
 
 
-def register_student(student_data: dict) -> bool:
+def register_student(student_data: dict, conn=None) -> bool:
     """
     Add or update a student in the registry.
     student_data must have: name, student_number, course, year, section
+    If *conn* is provided the caller's connection is reused (no new pool checkout).
     Returns True if new, False if updated.
     """
     student_number = str(student_data.get('student_number', '')).strip()
     if not student_number:
         return False
 
-    with get_db() as conn:
-        cursor = conn.execute(
-            "SELECT student_number FROM students WHERE student_number = ?",
+    def _do(c):
+        cur = _cur(c)
+        cur.execute(
+            "SELECT student_number FROM students WHERE student_number = %s",
             (student_number,)
         )
-        existing = cursor.fetchone()
-        is_new = existing is None
-
-        conn.execute(
+        existing = cur.fetchone()
+        cur.execute(
             """
             INSERT INTO students (student_number, name, course, year, section)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT(student_number) DO UPDATE SET
-                name = excluded.name,
-                course = excluded.course,
-                year = excluded.year,
-                section = excluded.section
+                name = EXCLUDED.name,
+                course = EXCLUDED.course,
+                year = EXCLUDED.year,
+                section = EXCLUDED.section
             """,
             (
                 student_number,
@@ -44,7 +44,13 @@ def register_student(student_data: dict) -> bool:
                 str(student_data.get('section', '')).strip(),
             ),
         )
-    return is_new
+        return existing is None
+
+    if conn is not None:
+        return _do(conn)
+
+    with get_db() as c:
+        return _do(c)
 
 
 def register_students_bulk(students: list) -> dict:
@@ -65,22 +71,24 @@ def register_students_bulk(students: list) -> dict:
 def get_all_students() -> list:
     """Return all registered students as a list of dicts."""
     with get_db() as conn:
-        cursor = conn.execute(
+        cur = _cur(conn)
+        cur.execute(
             "SELECT student_number, name, course, year, section FROM students ORDER BY student_number"
         )
-        rows = cursor.fetchall()
+        rows = cur.fetchall()
     return [dict(r) for r in rows]
 
 
 def get_student(student_number: str) -> dict | None:
     """Get a single student by student number."""
     with get_db() as conn:
-        cursor = conn.execute(
-            "SELECT student_number, name, course, year, section FROM students WHERE student_number = ?",
+        cur = _cur(conn)
+        cur.execute(
+            "SELECT student_number, name, course, year, section FROM students WHERE student_number = %s",
             (str(student_number),)
         )
-        row = cursor.fetchone()
-    return _row_to_dict(row)
+        row = cur.fetchone()
+    return dict(row) if row else {}
 
 
 def get_students_by_filter(course: str = None,
@@ -106,19 +114,21 @@ def get_students_by_filter(course: str = None,
 def delete_student(student_number: str) -> bool:
     """Delete a student from the registry."""
     with get_db() as conn:
-        cursor = conn.execute(
-            "DELETE FROM students WHERE student_number = ?",
+        cur = _cur(conn)
+        cur.execute(
+            "DELETE FROM students WHERE student_number = %s",
             (str(student_number),)
         )
-        return cursor.rowcount > 0
+        return cur.rowcount > 0
 
 
 def clear_registry() -> int:
     """Delete all students from registry. Returns count deleted."""
     with get_db() as conn:
-        cursor = conn.execute("SELECT COUNT(*) FROM students")
-        count = cursor.fetchone()[0]
-        conn.execute("DELETE FROM students")
+        cur = _cur(conn)
+        cur.execute("SELECT COUNT(*) AS cnt FROM students")
+        count = cur.fetchone()['cnt']
+        cur.execute("DELETE FROM students")
     return count
 
 

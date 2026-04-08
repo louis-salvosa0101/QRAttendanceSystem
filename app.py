@@ -8,6 +8,7 @@ import zipfile
 from datetime import datetime
 from flask import (Flask, render_template, request, jsonify, redirect,
                    url_for, flash, send_from_directory, send_file)
+from flask_login import login_required, login_user, logout_user, current_user
 from werkzeug.utils import secure_filename
 from config import (SECRET_KEY, QR_CODES_DIR, EXCEL_DIR, MASTER_LIST_DIR,
                     ATTENDANCE_LOG_FILE, FINE_LATE, FINE_ABSENT, FINE_PARTIAL,
@@ -16,7 +17,9 @@ from crypto_utils import decrypt_qr_data
 from qr_generator import generate_single_qr, batch_generate_from_excel
 from session_manager import (create_session, get_session, get_active_sessions,
                               get_all_sessions, validate_session,
-                              record_student_scan, close_session, clear_all_sessions)
+                              record_student_scan, close_session, clear_all_sessions,
+                              process_scan, get_session_row)
+from db import get_db, _cur
 from excel_logger import (log_attendance, log_absent_students,
                            generate_summary_sheet,
                            get_attendance_records, get_session_stats,
@@ -27,11 +30,16 @@ from student_registry import (register_student, register_students_bulk,
                                clear_registry, get_registry_stats)
 
 from db import init_db
+from auth import login_manager, authenticate, seed_default_admin
+
 init_db()
+seed_default_admin()
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+
+login_manager.init_app(app)
 
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
@@ -40,9 +48,42 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+# ─── AUTH ROUTES ──────────────────────────────────────────────────────────
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Officer login page."""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        officer = authenticate(username, password)
+        if officer:
+            login_user(officer)
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        else:
+            error = 'Invalid username or password.'
+
+    return render_template('login.html', error=error)
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Log out the current officer."""
+    logout_user()
+    return redirect(url_for('login'))
+
+
 # ─── PAGES ───────────────────────────────────────────────────────────────
 
 @app.route('/')
+@login_required
 def index():
     """Dashboard / Home page."""
     active_sessions = get_active_sessions()
@@ -55,6 +96,7 @@ def index():
 
 
 @app.route('/scanner')
+@login_required
 def scanner_page():
     """QR Scanner page for teachers."""
     active_sessions = get_active_sessions()
@@ -62,6 +104,7 @@ def scanner_page():
 
 
 @app.route('/sessions')
+@login_required
 def sessions_page():
     """Session management page."""
     active_sessions = get_active_sessions()
@@ -75,9 +118,9 @@ def sessions_page():
 
 
 @app.route('/generate')
+@login_required
 def generate_page():
     """QR Code generation page."""
-    # List existing QR codes
     qr_files = []
     if os.path.exists(QR_CODES_DIR):
         qr_files = [f for f in os.listdir(QR_CODES_DIR) if f.endswith('.png')]
@@ -85,6 +128,7 @@ def generate_page():
 
 
 @app.route('/records')
+@login_required
 def records_page():
     """Attendance records page."""
     session_id = request.args.get('session_id', '')
@@ -113,6 +157,7 @@ def records_page():
 
 
 @app.route('/students')
+@login_required
 def students_page():
     """Student registry management page."""
     students = get_all_students()
@@ -120,9 +165,72 @@ def students_page():
     return render_template('students.html', students=students, stats=stats)
 
 
+@app.route('/students/<student_number>')
+@login_required
+def student_detail_page(student_number):
+    """Individual student dashboard with attendance records and fines."""
+    student = get_student(student_number)
+    if not student or not student.get('student_number'):
+        return render_template('404.html'), 404
+
+    records = get_attendance_records(student_number=student_number)
+
+    # Compute summary stats
+    total_fines = 0
+    absent_count = 0
+    late_count = 0
+    partial_count = 0
+    time_in_count = 0
+    time_out_count = 0
+    sessions_set = set()
+    fines_list = []
+
+    for r in records:
+        fine = r.get('fine') or 0
+        total_fines += fine
+        sess_id = r.get('session_id')
+        if sess_id:
+            sessions_set.add(sess_id)
+        status = r.get('status', '')
+        if status == 'Absent':
+            absent_count += 1
+        elif status == 'Time In':
+            time_in_count += 1
+        elif status == 'Time Out':
+            time_out_count += 1
+        if 'Partial' in status:
+            partial_count += 1
+        if fine > 0:
+            late_count += 1
+            fines_list.append({
+                'date': r.get('datetime', ''),
+                'session_id': sess_id,
+                'status': status,
+                'fine': fine,
+                'reason': r.get('fine_reason', ''),
+            })
+
+    summary = {
+        'total_sessions': len(sessions_set),
+        'absent_count': absent_count,
+        'late_count': late_count,
+        'partial_count': partial_count,
+        'time_in_count': time_in_count,
+        'time_out_count': time_out_count,
+        'total_fines': total_fines,
+    }
+
+    return render_template('student_detail.html',
+                           student=student,
+                           records=records,
+                           summary=summary,
+                           fines_list=fines_list)
+
+
 # ─── API ENDPOINTS ──────────────────────────────────────────────────────
 
 @app.route('/api/session/create', methods=['POST'])
+@login_required
 def api_create_session():
     """Create a new attendance session."""
     data = request.get_json()
@@ -147,25 +255,22 @@ def api_create_session():
 
 
 @app.route('/api/session/<session_id>/close', methods=['POST'])
+@login_required
 def api_close_session(session_id):
     """
     Close an attendance session.
     After closing, mark absent all registered students who were required but didn't scan.
     """
-    # Get session before closing so we have the filter info
     session = get_session(session_id)
     if not session:
         return jsonify({'success': False, 'message': 'Session not found.'})
 
-    # Close session (sets partial fines for Time-In-only students)
     success, message = close_session(session_id)
     if not success:
         return jsonify({'success': False, 'message': message})
 
-    # Re-fetch session after close to get updated scanned_students
     session = get_session(session_id)
 
-    # Determine required students
     required_students = get_students_by_filter(
         course=session.get('required_course') or None,
         year=session.get('required_year') or None,
@@ -185,6 +290,7 @@ def api_close_session(session_id):
 
 
 @app.route('/api/session/clear-history', methods=['DELETE'])
+@login_required
 def api_clear_session_history():
     """Clear all session history from database."""
     try:
@@ -199,6 +305,7 @@ def api_clear_session_history():
 
 
 @app.route('/api/session/<session_id>/stats')
+@login_required
 def api_session_stats(session_id):
     """Get statistics for a session."""
     stats = get_session_stats(session_id)
@@ -207,17 +314,17 @@ def api_session_stats(session_id):
 
 
 @app.route('/api/scan', methods=['POST'])
+@login_required
 def api_scan_qr():
     """
     Process a scanned QR code.
-    Validates session, decrypts QR, checks for duplicates, and logs attendance.
-    Applies late fine if scanned > LATE_THRESHOLD_MINUTES after session start.
+    Uses a single pooled DB connection for the entire pipeline:
+      validate session -> check filters -> register student -> record scan -> log attendance.
     """
     data = request.get_json()
     qr_content = data.get('qr_data', '')
     session_id = data.get('session_id', '')
 
-    # Validate session
     if not session_id:
         return jsonify({
             'success': False,
@@ -225,15 +332,7 @@ def api_scan_qr():
             'message': 'No active session selected. Please select or create a session first.'
         })
 
-    is_valid, msg = validate_session(session_id)
-    if not is_valid:
-        return jsonify({
-            'success': False,
-            'error': 'invalid_session',
-            'message': msg
-        })
-
-    # Decrypt QR data
+    # Decrypt first (CPU-only, no DB needed)
     student_data = decrypt_qr_data(qr_content)
     if not student_data:
         return jsonify({
@@ -242,7 +341,6 @@ def api_scan_qr():
             'message': 'Invalid or tampered QR code. Could not decrypt data.'
         })
 
-    # Check required fields
     required_fields = ['name', 'student_number', 'course', 'year', 'section']
     for field in required_fields:
         if field not in student_data:
@@ -252,9 +350,38 @@ def api_scan_qr():
                 'message': f'QR code is missing required field: {field}'
             })
 
-    # Check if student is included in session (course/year/section filter)
-    session = get_session(session_id)
-    if session:
+    # --- single DB connection for everything below ---
+    with get_db() as conn:
+        # 1. Lightweight session fetch (no scanned-students load)
+        session = get_session_row(conn, session_id)
+        if not session:
+            return jsonify({
+                'success': False,
+                'error': 'invalid_session',
+                'message': 'Session not found.'
+            })
+
+        if not session.get('is_active'):
+            return jsonify({
+                'success': False,
+                'error': 'invalid_session',
+                'message': 'Session has been closed.'
+            })
+
+        now = datetime.now()
+        expires_at = datetime.fromisoformat(session['expires_at'])
+        if now >= expires_at:
+            _cur(conn).execute(
+                "UPDATE sessions SET is_active = 0 WHERE session_id = %s",
+                (session_id,),
+            )
+            return jsonify({
+                'success': False,
+                'error': 'invalid_session',
+                'message': 'Session has expired.'
+            })
+
+        # 2. Course / year / section filter check
         req_course = session.get('required_course') or ''
         req_year = session.get('required_year') or []
         req_section = session.get('required_section') or ''
@@ -268,7 +395,10 @@ def api_scan_qr():
         if req_year and isinstance(req_year, list) and len(req_year) > 0 and student_year not in req_year:
             year_labels = {'1': '1st', '2': '2nd', '3': '3rd', '4': '4th', '5': '5th'}
             allowed = ', '.join(year_labels.get(y, y) + ' year' for y in req_year)
-            not_included_reasons.append(f"year level (you are {year_labels.get(student_year, student_year)} year; session is for {allowed} only)")
+            not_included_reasons.append(
+                f"year level (you are {year_labels.get(student_year, student_year)} year; "
+                f"session is for {allowed} only)"
+            )
         if req_section and student_section != req_section:
             not_included_reasons.append(f"section ({student_section} != {req_section})")
 
@@ -281,37 +411,33 @@ def api_scan_qr():
                 'student': student_data
             })
 
-    # Auto-register student into registry if not already there
-    register_student(student_data)
+        # 3. Register / upsert student (reuses conn)
+        register_student(student_data, conn=conn)
 
-    # Record scan (Time In / Time Out logic) + fine calculation
-    success, scan_msg, scan_type, fine, fine_reason = record_student_scan(
-        session_id, student_data['student_number']
-    )
-    if not success:
-        return jsonify({
-            'success': False,
-            'error': 'duplicate',
-            'message': f"{student_data['name']} ({student_data['student_number']}) - {scan_msg}",
-            'student': student_data
-        })
+        # 4. Validate + record scan + get count (reuses conn)
+        success, scan_msg, scan_type, fine, fine_reason, attendance_count = \
+            process_scan(conn, session_id, student_data['student_number'])
 
-    # Determine status label
-    status = 'Time In' if scan_type == 'time_in' else 'Time Out'
+        if not success:
+            return jsonify({
+                'success': False,
+                'error': 'duplicate',
+                'message': f"{student_data['name']} ({student_data['student_number']}) - {scan_msg}",
+                'student': student_data
+            })
 
-    # Log to Excel with fine info
-    log_success = log_attendance(student_data, session_id, status=status,
-                                 fine=fine, fine_reason=fine_reason)
+        status = 'Time In' if scan_type == 'time_in' else 'Time Out'
+
+        # 5. Log attendance record (reuses conn)
+        log_success = log_attendance(student_data, session_id, status=status,
+                                     fine=fine, fine_reason=fine_reason, conn=conn)
 
     if not log_success:
         return jsonify({
             'success': False,
             'error': 'log_error',
-            'message': 'Failed to log attendance to Excel file.'
+            'message': 'Failed to log attendance.'
         })
-
-    # Get updated session stats
-    session = get_session(session_id)
 
     fine_msg = f' | Fine: ₱{fine} ({fine_reason})' if fine else ''
     return jsonify({
@@ -322,13 +448,14 @@ def api_scan_qr():
         'status': status,
         'fine': fine,
         'fine_reason': fine_reason,
-        'attendance_count': session['attendance_count'] if session else 0
+        'attendance_count': attendance_count
     })
 
 
 # ─── STUDENT REGISTRY API ──────────────────────────────────────────────
 
 @app.route('/api/students', methods=['GET'])
+@login_required
 def api_list_students():
     """List all registered students."""
     students = get_all_students()
@@ -337,6 +464,7 @@ def api_list_students():
 
 
 @app.route('/api/students/register', methods=['POST'])
+@login_required
 def api_register_student():
     """Register a single student manually."""
     data = request.get_json()
@@ -362,11 +490,12 @@ def api_register_student():
 
 
 @app.route('/api/students/register-qr', methods=['POST'])
+@login_required
 def api_register_student_qr():
     """
     Register a student by scanning their QR code.
     Decrypts the QR payload and adds the student to the registry.
-    No active session is needed — this is registry-only.
+    No active session is needed -- this is registry-only.
     """
     data = request.get_json()
     qr_content = data.get('qr_data', '').strip()
@@ -399,6 +528,7 @@ def api_register_student_qr():
 
 
 @app.route('/api/students/import', methods=['POST'])
+@login_required
 def api_import_students():
     """Import students from an uploaded Excel file into the registry."""
     if 'file' not in request.files:
@@ -420,7 +550,6 @@ def api_import_students():
         wb = load_workbook(upload_path)
         ws = wb.active
 
-        # Find headers
         headers = {}
         for col_idx, cell in enumerate(ws[1], 1):
             if cell.value:
@@ -477,6 +606,7 @@ def api_import_students():
 
 
 @app.route('/api/students/<student_number>', methods=['DELETE'])
+@login_required
 def api_delete_student(student_number):
     """Delete a student from the registry."""
     success = delete_student(student_number)
@@ -487,6 +617,7 @@ def api_delete_student(student_number):
 
 
 @app.route('/api/students/clear', methods=['DELETE'])
+@login_required
 def api_clear_students():
     """Clear entire student registry."""
     count = clear_registry()
@@ -496,6 +627,7 @@ def api_clear_students():
 # ─── QR GENERATION API ──────────────────────────────────────────────────
 
 @app.route('/api/generate/single', methods=['POST'])
+@login_required
 def api_generate_single():
     """Generate a single QR code and auto-register the student."""
     data = request.get_json()
@@ -511,7 +643,6 @@ def api_generate_single():
         if not student_data['name'] or not student_data['student_number']:
             return jsonify({'success': False, 'message': 'Name and Student Number are required.'})
 
-        # Auto-register into registry
         register_student(student_data)
 
         filepath = generate_single_qr(student_data)
@@ -528,6 +659,7 @@ def api_generate_single():
 
 
 @app.route('/api/generate/batch', methods=['POST'])
+@login_required
 def api_generate_batch():
     """Generate QR codes from an uploaded Excel file and register all students."""
     if 'file' not in request.files:
@@ -547,8 +679,6 @@ def api_generate_batch():
 
         results = batch_generate_from_excel(upload_path)
 
-        # Also register all students into registry
-        # Read the Excel again for registration
         from openpyxl import load_workbook as lw
         wb = lw(upload_path)
         ws = wb.active
@@ -604,6 +734,7 @@ def api_generate_batch():
 
 
 @app.route('/api/generate/sample', methods=['POST'])
+@login_required
 def api_generate_sample():
     """Generate a sample master list Excel file."""
     try:
@@ -618,6 +749,7 @@ def api_generate_sample():
 
 
 @app.route('/api/records/summary', methods=['POST'])
+@login_required
 def api_generate_summary():
     """Generate the summary sheet in the attendance log."""
     try:
@@ -631,6 +763,7 @@ def api_generate_summary():
 
 
 @app.route('/api/records/download')
+@login_required
 def api_download_records():
     """Download the attendance records as Excel (supports filters)."""
     session_id = request.args.get('session_id', '')
@@ -646,7 +779,6 @@ def api_download_records():
     )
 
     if not records:
-        # Create empty Excel export when no records
         from openpyxl import Workbook
         wb = Workbook()
         ws = wb.active
@@ -676,8 +808,6 @@ def api_download_records():
         cell.alignment = Alignment(horizontal='center')
 
     for r in records:
-        # Re-sort 'status' and fine logic to highlight Fines (Late/Absent/Partial) or Presents
-        # Actually just dumping what's there
         ws.append([
             r['datetime'],
             r['name'],
@@ -694,20 +824,21 @@ def api_download_records():
     out = io.BytesIO()
     wb.save(out)
     out.seek(0)
-    
+
     filename = "attendance_export.xlsx"
     if session_id:
         filename = f"session_{session_id}_records.xlsx"
 
     return send_file(
-        out, 
-        as_attachment=True, 
-        download_name=filename, 
+        out,
+        as_attachment=True,
+        download_name=filename,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
 
 @app.route('/api/records/reset', methods=['DELETE'])
+@login_required
 def api_reset_records():
     """Reset all attendance records by clearing the database."""
     try:
@@ -722,6 +853,7 @@ def api_reset_records():
 
 
 @app.route('/api/qrcodes/list')
+@login_required
 def api_list_qrcodes():
     """List all generated QR code files."""
     qr_files = []
@@ -731,6 +863,7 @@ def api_list_qrcodes():
 
 
 @app.route('/api/qrcodes/clear', methods=['DELETE'])
+@login_required
 def api_clear_qrcodes():
     """Delete all generated QR code files."""
     try:
@@ -750,6 +883,7 @@ def api_clear_qrcodes():
 
 
 @app.route('/api/qrcodes/download-all')
+@login_required
 def api_download_all_qrcodes():
     """Download all generated QR codes as a single ZIP file."""
     try:
@@ -760,7 +894,6 @@ def api_download_all_qrcodes():
         if not qr_files:
             return jsonify({'success': False, 'message': 'No QR codes to download.'}), 404
 
-        # Create ZIP in memory
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
             for filename in qr_files:
@@ -781,6 +914,7 @@ def api_download_all_qrcodes():
 # ─── STATIC FILE SERVING ────────────────────────────────────────────────
 
 @app.route('/qrcodes/<filename>')
+@login_required
 def serve_qr(filename):
     """Serve generated QR code images."""
     return send_from_directory(QR_CODES_DIR, filename)
@@ -800,42 +934,20 @@ def server_error(e):
 
 # ─── RUN ─────────────────────────────────────────────────────────────────
 
-def start_ngrok(port):
-    """Start an ngrok tunnel for mobile access over HTTPS."""
-    try:
-        from pyngrok import ngrok
-        public_url = ngrok.connect(port, "http").public_url
-        print("\n" + "*" * 60)
-        print("  NGROK TUNNEL ACTIVE")
-        print(f"  Public URL: {public_url}")
-        https_url = public_url.replace("http://", "https://")
-        if public_url != https_url:
-            print(f"  HTTPS URL:  {https_url}")
-        print("  Use this URL on your phone to access the system")
-        print("*" * 60 + "\n")
-        return public_url
-    except ImportError:
-        print("  [!] pyngrok not installed. Run: pip install pyngrok")
-        return None
-    except Exception as e:
-        print(f"  [!] ngrok failed to start: {e}")
-        print("  [!] Make sure you've set your authtoken:")
-        print("      ngrok config add-authtoken YOUR_TOKEN")
-        return None
-
-
-USE_NGROK = os.environ.get('USE_NGROK', '1') == '1'
-
 if __name__ == '__main__':
-    port = 5000
+    port = int(os.environ.get('PORT', 5000))
     print("\n" + "=" * 60)
     print("  QR Attendance System")
     print(f"  Local URL:   http://127.0.0.1:{port}")
     print("=" * 60)
 
-    if USE_NGROK:
-        start_ngrok(port)
-    else:
-        print("  Set USE_NGROK=1 to enable ngrok tunnel for mobile\n")
+    use_ngrok = os.environ.get('USE_NGROK', '0') == '1'
+    if use_ngrok:
+        try:
+            from pyngrok import ngrok
+            public_url = ngrok.connect(port, "http").public_url
+            print(f"  Ngrok URL:   {public_url}")
+        except Exception as e:
+            print(f"  [!] ngrok failed: {e}")
 
     app.run(debug=True, host='0.0.0.0', port=port, use_reloader=False)

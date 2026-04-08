@@ -1,7 +1,7 @@
 """
 Session management for class attendance sessions.
 Each session has a unique ID, creation time, and expiration.
-Sessions are stored in SQLite for ACID compliance and durability.
+Sessions are stored in PostgreSQL (Supabase) for ACID compliance and durability.
 """
 import json
 import secrets
@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from config import (SESSION_DURATION_HOURS, FINE_LATE, FINE_ABSENT,
                     FINE_PARTIAL, LATE_THRESHOLD_MINUTES)
-from db import get_db, _row_to_dict
+from db import get_db, _cur
 
 
 def _session_row_to_dict(row, scanned_students: dict = None) -> dict:
@@ -34,12 +34,13 @@ def _session_row_to_dict(row, scanned_students: dict = None) -> dict:
 
 def _load_scanned_students(conn, session_id: str) -> dict:
     """Load scanned students for a session as {student_number: {status, time_in, time_out, fine, fine_reason}}."""
-    cursor = conn.execute(
+    cur = _cur(conn)
+    cur.execute(
         """SELECT student_number, status, time_in, time_out, fine, fine_reason
-           FROM session_scans WHERE session_id = ?""",
+           FROM session_scans WHERE session_id = %s""",
         (session_id,)
     )
-    rows = cursor.fetchall()
+    rows = cur.fetchall()
     result = {}
     for r in rows:
         result[r['student_number']] = {
@@ -72,10 +73,11 @@ def create_session(subject: str = "", teacher: str = "", notes: str = "",
     required_year_json = json.dumps(required_year or [])
 
     with get_db() as conn:
-        conn.execute(
+        cur = _cur(conn)
+        cur.execute(
             """INSERT INTO sessions (session_id, subject, teacher, notes, created_at, expires_at,
                is_active, required_course, required_year, required_section)
-               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+               VALUES (%s, %s, %s, %s, %s, %s, 1, %s, %s, %s)""",
             (session_id, subject, teacher, notes, now.isoformat(), expires_at.isoformat(),
              required_course, required_year_json, required_section)
         )
@@ -87,13 +89,14 @@ def create_session(subject: str = "", teacher: str = "", notes: str = "",
 def get_session(session_id: str) -> dict | None:
     """Get a session by its ID."""
     with get_db() as conn:
-        cursor = conn.execute(
+        cur = _cur(conn)
+        cur.execute(
             """SELECT session_id, subject, teacher, notes, created_at, expires_at,
                is_active, required_course, required_year, required_section
-               FROM sessions WHERE session_id = ?""",
+               FROM sessions WHERE session_id = %s""",
             (session_id,)
         )
-        row = cursor.fetchone()
+        row = cur.fetchone()
         if not row:
             return None
         scanned = _load_scanned_students(conn, session_id)
@@ -104,20 +107,20 @@ def get_active_sessions() -> list:
     """Get all currently active sessions."""
     now = datetime.now()
     with get_db() as conn:
-        # Auto-expire sessions that have passed
-        conn.execute(
+        cur = _cur(conn)
+        cur.execute(
             """UPDATE sessions SET is_active = 0
-               WHERE is_active = 1 AND expires_at <= ?""",
+               WHERE is_active = 1 AND expires_at <= %s""",
             (now.isoformat(),)
         )
 
-        cursor = conn.execute(
+        cur.execute(
             """SELECT session_id, subject, teacher, notes, created_at, expires_at,
                is_active, required_course, required_year, required_section
-               FROM sessions WHERE is_active = 1 AND expires_at > ?""",
+               FROM sessions WHERE is_active = 1 AND expires_at > %s""",
             (now.isoformat(),)
         )
-        rows = cursor.fetchall()
+        rows = cur.fetchall()
 
     result = []
     for row in rows:
@@ -130,12 +133,13 @@ def get_active_sessions() -> list:
 def get_all_sessions() -> list:
     """Get all sessions (active and expired)."""
     with get_db() as conn:
-        cursor = conn.execute(
+        cur = _cur(conn)
+        cur.execute(
             """SELECT session_id, subject, teacher, notes, created_at, expires_at,
                is_active, required_course, required_year, required_section
                FROM sessions ORDER BY created_at DESC"""
         )
-        rows = cursor.fetchall()
+        rows = cur.fetchall()
 
     result = []
     for row in rows:
@@ -161,8 +165,9 @@ def validate_session(session_id: str) -> tuple:
     expires_at = datetime.fromisoformat(session['expires_at'])
     if now >= expires_at:
         with get_db() as conn:
-            conn.execute(
-                "UPDATE sessions SET is_active = 0 WHERE session_id = ?",
+            cur = _cur(conn)
+            cur.execute(
+                "UPDATE sessions SET is_active = 0 WHERE session_id = %s",
                 (session_id,)
             )
         return False, "Session has expired."
@@ -184,34 +189,140 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
     now_iso = now.isoformat()
 
     if student_number not in scanned:
-        # First scan → Time In
+        # First scan -> Time In
         session_start = datetime.fromisoformat(session['created_at'])
         minutes_late = (now - session_start).total_seconds() / 60
         fine = FINE_LATE if minutes_late > LATE_THRESHOLD_MINUTES else 0
         fine_reason = f'Late by {int(minutes_late)} min (>{LATE_THRESHOLD_MINUTES} min threshold)' if fine else ''
 
         with get_db() as conn:
-            conn.execute(
+            cur = _cur(conn)
+            cur.execute(
                 """INSERT INTO session_scans (session_id, student_number, status, time_in, time_out, fine, fine_reason)
-                   VALUES (?, ?, 'in', ?, NULL, ?, ?)""",
+                   VALUES (%s, %s, 'in', %s, NULL, %s, %s)""",
                 (session_id, student_number, now_iso, fine, fine_reason)
             )
         return True, "Time In recorded.", 'time_in', fine, fine_reason
 
     elif scanned[student_number]['status'] == 'in':
-        # Second scan → Time Out
+        # Second scan -> Time Out (fine was already applied at Time In, don't charge again)
         with get_db() as conn:
-            conn.execute(
-                """UPDATE session_scans SET status = 'out', time_out = ?
-                   WHERE session_id = ? AND student_number = ?""",
+            cur = _cur(conn)
+            cur.execute(
+                """UPDATE session_scans SET status = 'out', time_out = %s
+                   WHERE session_id = %s AND student_number = %s""",
                 (now_iso, session_id, student_number)
             )
-        info = scanned[student_number]
-        return True, "Time Out recorded.", 'time_out', info.get('fine', 0), info.get('fine_reason', '')
+        return True, "Time Out recorded.", 'time_out', 0, ''
 
     else:
-        # Already timed out
         return False, "Student already timed in and timed out for this session.", None, 0, ''
+
+
+def process_scan(conn, session_id: str, student_number: str) -> tuple:
+    """
+    Validate the session and record a student scan in one connection.
+    Only queries the single student's row instead of loading all scanned
+    students.  Designed to be called inside an outer ``get_db()`` block so
+    the caller can share the same connection for registration and logging.
+
+    Returns (success, message, scan_type, fine_amount, fine_reason, attendance_count).
+    """
+    cur = _cur(conn)
+
+    # 1. Fetch session row
+    cur.execute(
+        """SELECT session_id, subject, teacher, notes, created_at, expires_at,
+               is_active, required_course, required_year, required_section
+           FROM sessions WHERE session_id = %s""",
+        (session_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return False, "Session not found.", None, 0, '', 0
+
+    session = _session_row_to_dict(row)
+
+    if not session.get('is_active'):
+        return False, "Session has been closed.", None, 0, '', 0
+
+    now = datetime.now()
+    expires_at = datetime.fromisoformat(session['expires_at'])
+    if now >= expires_at:
+        cur.execute(
+            "UPDATE sessions SET is_active = 0 WHERE session_id = %s",
+            (session_id,),
+        )
+        return False, "Session has expired.", None, 0, '', 0
+
+    # 2. Check course / year / section requirements (returned to caller)
+    #    We expose the session dict so the caller can do the filter check
+    #    before we touch session_scans.  Store it on the tuple via a helper.
+    #    -- actually, let the caller handle that before calling us.
+
+    # 3. Look up only THIS student's existing scan
+    cur.execute(
+        """SELECT status, fine, fine_reason
+           FROM session_scans WHERE session_id = %s AND student_number = %s""",
+        (session_id, student_number),
+    )
+    existing = cur.fetchone()
+    now_iso = now.isoformat()
+
+    if existing is None:
+        # First scan -> Time In
+        session_start = datetime.fromisoformat(session['created_at'])
+        minutes_late = (now - session_start).total_seconds() / 60
+        fine = FINE_LATE if minutes_late > LATE_THRESHOLD_MINUTES else 0
+        fine_reason = (
+            f'Late by {int(minutes_late)} min (>{LATE_THRESHOLD_MINUTES} min threshold)'
+            if fine else ''
+        )
+        cur.execute(
+            """INSERT INTO session_scans
+               (session_id, student_number, status, time_in, time_out, fine, fine_reason)
+               VALUES (%s, %s, 'in', %s, NULL, %s, %s)""",
+            (session_id, student_number, now_iso, fine, fine_reason),
+        )
+        scan_type = 'time_in'
+
+    elif existing['status'] == 'in':
+        # Second scan -> Time Out (fine already applied at Time In)
+        cur.execute(
+            """UPDATE session_scans SET status = 'out', time_out = %s
+               WHERE session_id = %s AND student_number = %s""",
+            (now_iso, session_id, student_number),
+        )
+        fine, fine_reason, scan_type = 0, '', 'time_out'
+
+    else:
+        return (False, "Student already timed in and timed out for this session.",
+                None, 0, '', 0)
+
+    # 4. Cheap count instead of loading every row
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM session_scans WHERE session_id = %s",
+        (session_id,),
+    )
+    attendance_count = cur.fetchone()['cnt']
+
+    return True, ("Time In recorded." if scan_type == 'time_in' else "Time Out recorded."),\
+        scan_type, fine, fine_reason, attendance_count
+
+
+def get_session_row(conn, session_id: str) -> dict | None:
+    """Lightweight session fetch on an existing connection (no scanned-students load)."""
+    cur = _cur(conn)
+    cur.execute(
+        """SELECT session_id, subject, teacher, notes, created_at, expires_at,
+               is_active, required_course, required_year, required_section
+           FROM sessions WHERE session_id = %s""",
+        (session_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return _session_row_to_dict(row)
 
 
 def get_student_scan_info(session_id: str, student_number: str) -> dict:
@@ -232,18 +343,18 @@ def close_session(session_id: str) -> tuple:
         return False, "Session not found."
 
     with get_db() as conn:
+        cur = _cur(conn)
         scanned = session.get('scanned_students', {})
         for student_number, info in scanned.items():
             if info.get('status') == 'in':
-                # Partial scan: fine is only FINE_PARTIAL (25 pesos), not stacked with late fine
                 current_fine = FINE_PARTIAL
                 partial_reason = 'No Time Out recorded (partial scan) - considered late'
-                conn.execute(
-                    """UPDATE session_scans SET fine = ?, fine_reason = ?
-                       WHERE session_id = ? AND student_number = ?""",
+                cur.execute(
+                    """UPDATE session_scans SET fine = %s, fine_reason = %s
+                       WHERE session_id = %s AND student_number = %s""",
                     (current_fine, partial_reason, session_id, student_number)
                 )
-        conn.execute("UPDATE sessions SET is_active = 0 WHERE session_id = ?", (session_id,))
+        cur.execute("UPDATE sessions SET is_active = 0 WHERE session_id = %s", (session_id,))
 
     return True, "Session closed successfully."
 
@@ -251,6 +362,7 @@ def close_session(session_id: str) -> tuple:
 def clear_all_sessions() -> int:
     """Clear all sessions from the database. Returns count deleted."""
     with get_db() as conn:
-        conn.execute("DELETE FROM session_scans")
-        cursor = conn.execute("DELETE FROM sessions")
-        return cursor.rowcount
+        cur = _cur(conn)
+        cur.execute("DELETE FROM session_scans")
+        cur.execute("DELETE FROM sessions")
+        return cur.rowcount

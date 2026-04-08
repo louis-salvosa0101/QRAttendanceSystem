@@ -1318,7 +1318,7 @@
                     <i data-lucide="file-spreadsheet"></i>
                     Records
                 </a>
-                <a href="/students" class="nav-link {% if request.endpoint == 'students_page' %}active{% endif %}" id="nav-students">
+                <a href="/students" class="nav-link {% if request.endpoint in ['students_page', 'student_detail_page'] %}active{% endif %}" id="nav-students">
                     <i data-lucide="users"></i>
                     Students
                 </a>
@@ -1326,7 +1326,23 @@
         </nav>
 
         <div class="sidebar-footer">
+            {% if current_user.is_authenticated %}
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <div style="width:32px;height:32px;border-radius:50%;background:rgba(108,99,255,0.15);color:var(--accent-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">
+                    {{ current_user.name[0]|upper }}
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ current_user.name }}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">Officer</div>
+                </div>
+            </div>
+            <a href="/logout" class="btn btn-sm btn-outline" style="width:100%;justify-content:center;" id="btn-logout">
+                <i data-lucide="log-out"></i>
+                Sign Out
+            </a>
+            {% else %}
             <p>QR Attendance System v1.0</p>
+            {% endif %}
         </div>
     </aside>
 

@@ -1,6 +1,6 @@
 """
 Attendance logging module.
-Stores records in SQLite; provides Excel export for reports.
+Stores records in PostgreSQL (Supabase); provides Excel export for reports.
 """
 import os
 from datetime import datetime
@@ -9,7 +9,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from config import ATTENDANCE_LOG_FILE, EXCEL_DIR, FINE_ABSENT, FINE_PARTIAL, FINE_LATE
-from db import get_db, _row_to_dict
+from db import get_db, _cur
 
 
 # Style constants for Excel export
@@ -55,30 +55,33 @@ def _get_session_sheet_name(session_id: str) -> str:
 
 
 def log_attendance(student_data: dict, session_id: str, status: str = "Present",
-                   fine: int = 0, fine_reason: str = '') -> bool:
+                   fine: int = 0, fine_reason: str = '', conn=None) -> bool:
     """
-    Log a single attendance record to SQLite.
+    Log a single attendance record to PostgreSQL.
+    If *conn* is provided the caller's connection is reused (no new pool checkout).
     """
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    values = (
+        now,
+        student_data.get('name', ''),
+        student_data.get('student_number', ''),
+        student_data.get('course', ''),
+        student_data.get('year', ''),
+        student_data.get('section', ''),
+        session_id,
+        status,
+        fine or 0,
+        fine_reason or '',
+    )
+    sql = """INSERT INTO attendance_records
+             (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
+             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
     try:
-        with get_db() as conn:
-            conn.execute(
-                """INSERT INTO attendance_records
-                   (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    now,
-                    student_data.get('name', ''),
-                    student_data.get('student_number', ''),
-                    student_data.get('course', ''),
-                    student_data.get('year', ''),
-                    student_data.get('section', ''),
-                    session_id,
-                    status,
-                    fine or 0,
-                    fine_reason or '',
-                ),
-            )
+        if conn is not None:
+            _cur(conn).execute(sql, values)
+        else:
+            with get_db() as c:
+                _cur(c).execute(sql, values)
         return True
     except Exception as e:
         print(f"Error logging attendance: {e}")
@@ -97,16 +100,16 @@ def log_absent_students(session_id: str, session_data: dict,
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     with get_db() as conn:
+        cur = _cur(conn)
         for student in required_students:
             student_number = str(student.get('student_number', ''))
             scan_info = scanned.get(student_number, {})
 
             if not scan_info:
-                # Never scanned → Absent
-                conn.execute(
+                cur.execute(
                     """INSERT INTO attendance_records
                        (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, 'Absent', ?, ?)""",
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, 'Absent', %s, %s)""",
                     (now, student.get('name', ''), student_number, student.get('course', ''),
                      student.get('year', ''), student.get('section', ''),
                      session_id, FINE_ABSENT, 'Absent - did not scan QR')
@@ -114,24 +117,22 @@ def log_absent_students(session_id: str, session_data: dict,
                 result['absent_logged'] += 1
 
             elif scan_info.get('status') == 'in':
-                # Only Time In → Partial scan: fine is only 25 pesos (considered late), not stacked
                 fine = FINE_PARTIAL
                 fine_reason = 'No Time Out recorded (partial scan) - considered late'
 
-                cursor = conn.execute(
+                cur.execute(
                     """UPDATE attendance_records
-                       SET status = 'Partial (No Time Out)', fine = ?, fine_reason = ?
-                       WHERE session_id = ? AND student_number = ? AND status = 'Time In'""",
+                       SET status = 'Partial (No Time Out)', fine = %s, fine_reason = %s
+                       WHERE session_id = %s AND student_number = %s AND status = 'Time In'""",
                     (fine, fine_reason, session_id, student_number)
                 )
-                if cursor.rowcount > 0:
+                if cur.rowcount > 0:
                     result['partial_updated'] += 1
                 else:
-                    # Fallback: insert if no Time In row found
-                    conn.execute(
+                    cur.execute(
                         """INSERT INTO attendance_records
                            (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, 'Partial (No Time Out)', ?, ?)""",
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, 'Partial (No Time Out)', %s, %s)""",
                         (now, student.get('name', ''), student_number, student.get('course', ''),
                          student.get('year', ''), student.get('section', ''),
                          session_id, fine, fine_reason),
@@ -144,7 +145,7 @@ def log_absent_students(session_id: str, session_data: dict,
 def generate_summary_sheet(filepath: str = None) -> bool:
     """
     Generate a summary Excel sheet with total attendance per student.
-    Reads from SQLite and writes to Excel file.
+    Reads from PostgreSQL and writes to Excel file.
     """
     if filepath is None:
         filepath = ATTENDANCE_LOG_FILE
@@ -222,29 +223,30 @@ def generate_summary_sheet(filepath: str = None) -> bool:
 def get_attendance_records(session_id: str = None, student_number: str = None,
                            date_from: str = None, date_to: str = None) -> list:
     """
-    Retrieve attendance records from SQLite with optional filters.
+    Retrieve attendance records from PostgreSQL with optional filters.
     """
     params = []
     conditions = []
     if session_id:
-        conditions.append("session_id = ?")
+        conditions.append("session_id = %s")
         params.append(session_id)
     if student_number:
-        conditions.append("student_number = ?")
+        conditions.append("student_number = %s")
         params.append(student_number)
     if date_from:
-        conditions.append("recorded_at >= ?")
+        conditions.append("recorded_at >= %s")
         params.append(date_from + " 00:00:00")
     if date_to:
-        conditions.append("recorded_at <= ?")
+        conditions.append("recorded_at <= %s")
         params.append(date_to + " 23:59:59")
 
     where = " AND ".join(conditions) if conditions else "1=1"
     query = f"SELECT recorded_at as datetime, name, student_number, course, year, section, session_id, status, fine, fine_reason FROM attendance_records WHERE {where} ORDER BY recorded_at"
 
     with get_db() as conn:
-        cursor = conn.execute(query, params)
-        rows = cursor.fetchall()
+        cur = _cur(conn)
+        cur.execute(query, params)
+        rows = cur.fetchall()
 
     return [dict(r) for r in rows]
 
@@ -321,7 +323,8 @@ def create_sample_master_list(filepath: str = None) -> str:
 def clear_attendance_records() -> int:
     """Clear all attendance records from the database. Returns count deleted."""
     with get_db() as conn:
-        cursor = conn.execute("SELECT COUNT(*) FROM attendance_records")
-        count = cursor.fetchone()[0]
-        conn.execute("DELETE FROM attendance_records")
+        cur = _cur(conn)
+        cur.execute("SELECT COUNT(*) AS cnt FROM attendance_records")
+        count = cur.fetchone()['cnt']
+        cur.execute("DELETE FROM attendance_records")
     return count

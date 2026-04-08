@@ -16,3 +16,8 @@ python-dotenv==1.2.2
 pyngrok==7.5.1
 PyYAML==6.0.3
 typing_extensions==4.15.0
+psycopg[binary]==3.3.3
+psycopg_pool==3.2.6
+Flask-Login==0.6.3
+bcrypt==4.2.0
+gunicorn==22.0.0

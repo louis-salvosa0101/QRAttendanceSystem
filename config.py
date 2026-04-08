@@ -44,8 +44,11 @@ ATTENDANCE_LOG_FILE = os.path.join(EXCEL_DIR, 'attendance_log.xlsx')
 SESSIONS_FILE = os.path.join(EXCEL_DIR, 'sessions.json')
 STUDENT_REGISTRY_FILE = os.path.join(EXCEL_DIR, 'student_registry.json')
 
-# SQLite database (primary storage)
+# SQLite database (legacy / local fallback)
 DATABASE_PATH = os.path.join(EXCEL_DIR, 'attendance.db')
+
+# PostgreSQL / Supabase (primary storage for production)
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
 # Session settings
 SESSION_DURATION_HOURS = 4  # How long a session remains valid

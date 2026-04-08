@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}{{ student.name }} - QR Attendance System{% endblock %}
+{% block page_title %}Student Profile{% endblock %}
+
+{% block content %}
+<!-- Back Button -->
+<div style="margin-bottom:20px;">
+    <a href="/students" class="btn btn-sm btn-outline" id="btn-back">
+        <i data-lucide="arrow-left"></i>
+        Back to Students
+    </a>
+</div>
+
+<!-- Student Info Card -->
+<div class="card mb-3">
+    <div class="card-body" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+        <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;color:white;flex-shrink:0;">
+            {{ student.name.split(' ')|map('first')|join('')|truncate(2, True, '')|upper }}
+        </div>
+        <div style="flex:1;min-width:200px;">
+            <h2 style="font-size:22px;font-weight:700;margin-bottom:4px;">{{ student.name }}</h2>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--text-secondary);">
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="hash" style="width:14px;height:14px;color:var(--accent-primary);"></i>
+                    <span style="font-family:'JetBrains Mono',monospace;">{{ student.student_number }}</span>
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--accent-primary);"></i>
+                    {{ student.course or '—' }}
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="layers" style="width:14px;height:14px;color:var(--accent-primary);"></i>
+                    Year {{ student.year or '—' }} - Section {{ student.section or '—' }}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="stats-grid mb-3" style="grid-template-columns:repeat(4,1fr);">
+    <div class="stat-card purple">
+        <div class="stat-icon"><i data-lucide="calendar-check"></i></div>
+        <div class="stat-value">{{ summary.total_sessions }}</div>
+        <div class="stat-label">Total Sessions</div>
+    </div>
+    <div class="stat-card green">
+        <div class="stat-icon"><i data-lucide="user-x"></i></div>
+        <div class="stat-value">{{ summary.absent_count }}</div>
+        <div class="stat-label">Absences</div>
+    </div>
+    <div class="stat-card amber">
+        <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-value">{{ summary.late_count }}</div>
+        <div class="stat-label">Fines Incurred</div>
+    </div>
+    <div class="stat-card blue">
+        <div class="stat-icon"><i data-lucide="philippine-peso"></i></div>
+        <div class="stat-value" style="color:{% if summary.total_fines > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">
+            ₱{{ summary.total_fines }}
+        </div>
+        <div class="stat-label">Total Fines</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <!-- Fines Breakdown -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="receipt"></i>
+                Fines Breakdown
+            </div>
+            {% if fines_list %}
+            <span class="badge badge-danger">{{ fines_list|length }} fine{{ 's' if fines_list|length != 1 }}</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            {% if fines_list %}
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Session</th>
+                            <th>Status</th>
+                            <th>Fine</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in fines_list %}
+                        <tr>
+                            <td style="font-size:13px;font-family:'JetBrains Mono',monospace;">{{ f.date[:16] }}</td>
+                            <td><span class="badge badge-info">{{ f.session_id }}</span></td>
+                            <td>
+                                {% if f.status == 'Absent' %}
+                                    <span class="badge badge-danger">Absent</span>
+                                {% elif 'Partial' in f.status %}
+                                    <span class="badge badge-warning">Partial</span>
+                                {% else %}
+                                    <span class="badge badge-warning">Late</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-weight:700;color:var(--accent-danger);">₱{{ f.fine }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding:30px;">
+                <i data-lucide="check-circle" style="width:40px;height:40px;color:var(--accent-success);opacity:0.6;"></i>
+                <h3 style="font-size:15px;margin-top:10px;">No Fines</h3>
+                <p style="font-size:13px;">This student has a clean record.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Attendance Summary -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="bar-chart-3"></i>
+                Attendance Summary
+            </div>
+        </div>
+        <div class="card-body">
+            <div style="display:flex;flex-direction:column;gap:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-input);border-radius:var(--radius-sm);">
+                    <span style="font-size:14px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="log-in" style="width:16px;height:16px;color:var(--accent-success);"></i>
+                        Time In Records
+                    </span>
+                    <span style="font-size:18px;font-weight:700;">{{ summary.time_in_count }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-input);border-radius:var(--radius-sm);">
+                    <span style="font-size:14px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="log-out" style="width:16px;height:16px;color:var(--accent-info);"></i>
+                        Time Out Records
+                    </span>
+                    <span style="font-size:18px;font-weight:700;">{{ summary.time_out_count }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-input);border-radius:var(--radius-sm);">
+                    <span style="font-size:14px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="user-x" style="width:16px;height:16px;color:var(--accent-danger);"></i>
+                        Absences
+                    </span>
+                    <span style="font-size:18px;font-weight:700;color:{% if summary.absent_count > 0 %}var(--accent-danger){% else %}inherit{% endif %};">{{ summary.absent_count }}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-input);border-radius:var(--radius-sm);">
+                    <span style="font-size:14px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="alert-triangle" style="width:16px;height:16px;color:var(--accent-warning);"></i>
+                        Partial Scans
+                    </span>
+                    <span style="font-size:18px;font-weight:700;">{{ summary.partial_count }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Full Attendance History -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="history"></i>
+            Attendance History
+        </div>
+        <span class="badge badge-info">{{ records|length }} records</span>
+    </div>
+    <div class="card-body">
+        {% if records %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Session ID</th>
+                        <th>Status</th>
+                        <th>Fine</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in records|reverse %}
+                    <tr>
+                        <td style="font-size:13px;font-family:'JetBrains Mono',monospace;">{{ r.datetime }}</td>
+                        <td><span class="badge badge-info">{{ r.session_id }}</span></td>
+                        <td>
+                            {% if r.status == 'Time In' %}
+                                <span class="badge badge-success">{{ r.status }}</span>
+                            {% elif r.status == 'Time Out' %}
+                                <span class="badge" style="background:rgba(59,130,246,0.15);color:var(--accent-info);">{{ r.status }}</span>
+                            {% elif r.status == 'Absent' %}
+                                <span class="badge badge-danger">{{ r.status }}</span>
+                            {% elif 'Partial' in r.status %}
+                                <span class="badge badge-warning">Partial</span>
+                            {% else %}
+                                <span class="badge">{{ r.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.fine and r.fine > 0 %}
+                                <span style="font-weight:700;color:var(--accent-danger);">₱{{ r.fine }}</span>
+                            {% else %}
+                                <span style="color:var(--text-muted);">—</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:12px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.fine_reason or '' }}">
+                            {{ r.fine_reason or '—' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i data-lucide="calendar-x"></i>
+            <h3>No Attendance Records</h3>
+            <p>This student has no attendance records yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    lucide.createIcons();
+</script>
+{% endblock %}
