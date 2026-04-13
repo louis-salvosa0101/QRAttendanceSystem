@@ -35,118 +35,112 @@
     <div class="stat-card amber">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
             <div>
-                <div class="stat-value" id="stat-security" style="font-size:22px;">AES-256</div>
-                <div class="stat-label">Encryption Active</div>
+                <div class="stat-value">{{ registry_stats.total }}</div>
+                <div class="stat-label">Registered Students</div>
             </div>
-            <div class="stat-icon"><i data-lucide="shield-check"></i></div>
+            <div class="stat-icon"><i data-lucide="graduation-cap"></i></div>
         </div>
     </div>
 </div>
 
-<div class="grid-2">
-    <!-- Quick Actions -->
-    <div class="card">
-        <div class="card-header">
-            <div class="card-title">
-                <i data-lucide="zap"></i>
-                Quick Actions
-            </div>
-        </div>
-        <div class="card-body">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                <a href="/scanner" class="btn btn-primary" id="btn-quick-scan" style="justify-content:center;padding:14px;">
-                    <i data-lucide="scan"></i>
-                    Start Scanning
-                </a>
-                <a href="/sessions" class="btn btn-success" id="btn-quick-session" style="justify-content:center;padding:14px;">
-                    <i data-lucide="plus-circle"></i>
-                    New Session
-                </a>
-                <a href="/generate" class="btn btn-outline" id="btn-quick-generate" style="justify-content:center;padding:14px;">
-                    <i data-lucide="qr-code"></i>
-                    Generate QR
-                </a>
-                <a href="/records" class="btn btn-outline" id="btn-quick-records" style="justify-content:center;padding:14px;">
-                    <i data-lucide="file-spreadsheet"></i>
-                    Records
-                </a>
-            </div>
+<!-- Quick Actions -->
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="zap"></i>
+            Quick Actions
         </div>
     </div>
+    <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
+            <a href="/scanner" class="btn btn-primary" id="btn-quick-scan" style="justify-content:center;padding:14px;border-radius:var(--radius-md);">
+                <i data-lucide="scan"></i>
+                Start Scanning
+            </a>
+            <a href="/sessions" class="btn btn-success" id="btn-quick-session" style="justify-content:center;padding:14px;border-radius:var(--radius-md);">
+                <i data-lucide="plus-circle"></i>
+                New Session
+            </a>
+            <a href="/generate" class="btn btn-outline" id="btn-quick-generate" style="justify-content:center;padding:14px;border-radius:var(--radius-md);">
+                <i data-lucide="qr-code"></i>
+                Generate QR
+            </a>
+            <a href="/records" class="btn btn-outline" id="btn-quick-records" style="justify-content:center;padding:14px;border-radius:var(--radius-md);">
+                <i data-lucide="file-spreadsheet"></i>
+                Records
+            </a>
+        </div>
+    </div>
+</div>
 
-    <!-- Active Sessions -->
-    <div class="card">
-        <div class="card-header">
-            <div class="card-title">
-                <i data-lucide="radio"></i>
-                Active Sessions
-            </div>
-            <span class="badge badge-success">
-                <i data-lucide="circle" style="width:8px;height:8px;fill:currentColor"></i>
-                Live
-            </span>
+<!-- Active Sessions -->
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="radio"></i>
+            Active Sessions
         </div>
-        <div class="card-body">
-            {% if active_sessions %}
-            {% for session in active_sessions %}
-            <div class="session-card" style="background:var(--bg-input);">
-                <div class="session-header">
-                    <div class="session-id">{{ session.session_id }}</div>
-                    <span class="badge badge-success">Active</span>
+        <span class="badge badge-success">
+            <i data-lucide="circle" style="width:6px;height:6px;fill:currentColor"></i>
+            {{ active_sessions|length }} Live
+        </span>
+    </div>
+    <div class="card-body">
+        {% if active_sessions %}
+        {% for session in active_sessions %}
+        <div class="session-card" style="background:var(--bg-input);border:1px solid var(--border);">
+            <div class="session-header">
+                <div class="session-id">{{ session.session_id }}</div>
+                <span class="badge badge-success">Active</span>
+            </div>
+            <div class="session-meta">
+                <div class="session-meta-item">
+                    <div class="session-meta-label">Subject</div>
+                    <div class="session-meta-value">{{ session.subject or 'N/A' }}</div>
                 </div>
-                <div class="session-meta">
-                    <div class="session-meta-item">
-                        <div class="session-meta-label">Subject</div>
-                        <div class="session-meta-value">{{ session.subject or 'N/A' }}</div>
-                    </div>
-                    <div class="session-meta-item">
-                        <div class="session-meta-label">Attendance</div>
-                        <div class="session-meta-value">{{ session.attendance_count }} students</div>
-                    </div>
-                    <div class="session-meta-item">
-                        <div class="session-meta-label">Expires</div>
-                        <div class="session-meta-value">{{ session.expires_at[:16] }}</div>
-                    </div>
+                <div class="session-meta-item">
+                    <div class="session-meta-label">Attendance</div>
+                    <div class="session-meta-value" style="color:var(--accent-success);font-weight:700;">{{ session.attendance_count }} students</div>
+                </div>
+                <div class="session-meta-item">
+                    <div class="session-meta-label">Expires</div>
+                    <div class="session-meta-value">{{ session.expires_at[:16] }}</div>
                 </div>
             </div>
-            {% endfor %}
-            {% else %}
-            <div class="empty-state" style="padding:40px 20px;">
-                <i data-lucide="calendar-x"></i>
-                <h3>No Active Sessions</h3>
-                <p>Create a new session to start taking attendance.</p>
-            </div>
-            {% endif %}
         </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state" style="padding:32px 16px;">
+            <i data-lucide="calendar-x"></i>
+            <h3>No Active Sessions</h3>
+            <p>Create a new session to start taking attendance.</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 
 <!-- System Info -->
-<div class="card mt-3">
+<div class="card">
     <div class="card-header">
         <div class="card-title">
-            <i data-lucide="info"></i>
-            System Information
+            <i data-lucide="shield-check"></i>
+            System Info
         </div>
     </div>
     <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
-            <div style="padding:14px 16px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
-                <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Encryption</div>
-                <div style="font-size:14px;font-weight:600;color:var(--text-primary);">AES-256-CBC</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+            <div style="padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
+                <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:4px;">Encryption</div>
+                <div style="font-size:13px;font-weight:600;color:var(--text-primary);">AES-256-CBC</div>
             </div>
-            <div style="padding:14px 16px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
-                <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Storage</div>
-                <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Excel (.xlsx) - Offline</div>
+            <div style="padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
+                <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:4px;">Database</div>
+                <div style="font-size:13px;font-weight:600;color:var(--text-primary);">PostgreSQL</div>
             </div>
-            <div style="padding:14px 16px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
-                <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Session Duration</div>
-                <div style="font-size:14px;font-weight:600;color:var(--text-primary);">4 Hours</div>
-            </div>
-            <div style="padding:14px 16px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
-                <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Status</div>
-                <div style="font-size:14px;font-weight:600;color:var(--accent-success);display:flex;align-items:center;gap:6px;">
-                    <i data-lucide="check-circle" style="width:14px;height:14px;"></i> System Online
+            <div style="padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
+                <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:4px;">Status</div>
+                <div style="font-size:13px;font-weight:600;color:var(--accent-success);display:flex;align-items:center;gap:4px;">
+                    <i data-lucide="check-circle" style="width:14px;height:14px;"></i> Online
                 </div>
             </div>
         </div>
@@ -156,7 +150,6 @@
 
 {% block scripts %}
 <script>
-    // Calculate today's scans from active sessions
     (function() {
         var scanCounts = [
             {% for session in active_sessions %}

@@ -3,7 +3,18 @@
 {% block page_title %}QR Scanner{% endblock %}
 
 {% block content %}
-<div class="grid-2">
+<style>
+    .scanner-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    @media (max-width: 900px) {
+        .scanner-layout { grid-template-columns: 1fr; }
+    }
+</style>
+
+<div class="scanner-layout">
     <!-- Scanner Section -->
     <div>
         <!-- Session Selector -->
@@ -27,10 +38,9 @@
                     </select>
                 </div>
                 {% else %}
-                <div class="alert alert-warning">
+                <div class="alert alert-warning" style="margin-bottom:0;">
                     <i data-lucide="alert-triangle"></i>
-                    No active sessions. <a href="/sessions" style="color: inherit; text-decoration: underline;">Create
-                        one first</a>.
+                    No active sessions. <a href="/sessions" style="color: inherit; text-decoration: underline;">Create one first</a>.
                 </div>
                 {% endif %}
             </div>
@@ -41,15 +51,15 @@
             <div class="card-header">
                 <div class="card-title">
                     <i data-lucide="camera"></i>
-                    Camera Scanner
+                    Camera
                 </div>
-                <button class="btn btn-sm btn-outline" id="btnToggleCamera" onclick="toggleCamera()">
+                <button class="btn btn-sm btn-primary" id="btnToggleCamera" onclick="toggleCamera()">
                     <i data-lucide="video"></i>
                     Start Camera
                 </button>
             </div>
             <div class="card-body">
-                <div class="scanner-container" id="scannerContainer">
+                <div class="scanner-container" id="scannerContainer" style="max-width:100%;">
                     <video id="videoElement" autoplay playsinline></video>
                     <canvas id="canvasElement" style="display:none;"></canvas>
                     <div class="scanner-overlay">
@@ -59,18 +69,18 @@
                         <div class="scanner-corners-bottom"></div>
                     </div>
                     <div id="scannerPlaceholder"
-                        style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:var(--bg-card);">
-                        <i data-lucide="camera-off" style="width:48px;height:48px;color:var(--text-muted);"></i>
-                        <p style="color:var(--text-muted);font-size:14px;">Click "Start Camera" to begin scanning</p>
+                        style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:var(--bg-card);">
+                        <i data-lucide="camera-off" style="width:40px;height:40px;color:var(--text-muted);opacity:0.4;"></i>
+                        <p style="color:var(--text-muted);font-size:13px;text-align:center;padding:0 16px;">Tap "Start Camera" to scan</p>
                     </div>
                 </div>
 
-        <!-- Manual Input -->
+                <!-- Manual Input -->
                 <div class="mt-2">
-                    <label class="form-label">Or paste QR data manually</label>
-                    <div style="display:flex;gap:8px;">
+                    <label class="form-label">Or paste QR data</label>
+                    <div style="display:flex;gap:6px;">
                         <input type="text" class="form-input" id="manualQrInput"
-                            placeholder="Paste encrypted QR data here...">
+                            placeholder="Paste encrypted QR data...">
                         <button class="btn btn-primary" onclick="processManualInput()" id="btn-manual-scan" style="flex-shrink:0;">
                             <i data-lucide="search"></i>
                         </button>
@@ -90,7 +100,7 @@
             <div class="card-header">
                 <div class="card-title">
                     <i data-lucide="bar-chart-3"></i>
-                    Session Statistics
+                    Statistics
                 </div>
                 <button class="btn btn-sm btn-outline" onclick="refreshStats()" id="btn-refresh-stats">
                     <i data-lucide="refresh-cw"></i>
@@ -98,10 +108,10 @@
             </div>
             <div class="card-body">
                 <div id="sessionStatsArea">
-                    <div class="empty-state" style="padding: 30px 20px;">
-                        <i data-lucide="pie-chart" style="width:40px;height:40px;"></i>
+                    <div class="empty-state" style="padding: 24px 16px;">
+                        <i data-lucide="pie-chart" style="width:36px;height:36px;"></i>
                         <h3>No Session Selected</h3>
-                        <p>Select an active session to view statistics.</p>
+                        <p>Select a session to view stats.</p>
                     </div>
                 </div>
             </div>
@@ -112,19 +122,19 @@
             <div class="card-header">
                 <div class="card-title">
                     <i data-lucide="activity"></i>
-                    Live Attendance Feed
+                    Live Feed
                 </div>
                 <span class="badge badge-success" id="liveBadge" style="display:none;">
                     <i data-lucide="circle" style="width:6px;height:6px;fill:currentColor;"></i>
                     Live
                 </span>
             </div>
-            <div class="card-body">
+            <div class="card-body" style="padding:0;">
                 <div class="live-feed" id="liveFeed">
-                    <div class="empty-state" style="padding: 30px 20px;">
-                        <i data-lucide="scan-line" style="width:40px;height:40px;"></i>
+                    <div class="empty-state" style="padding: 24px 16px;">
+                        <i data-lucide="scan-line" style="width:36px;height:36px;"></i>
                         <h3>Waiting for Scans</h3>
-                        <p>Scanned students will appear here in real-time.</p>
+                        <p>Scanned students will appear here.</p>
                     </div>
                 </div>
             </div>
@@ -134,7 +144,6 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- html5-qrcode library for camera QR scanning -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <script>
@@ -144,14 +153,12 @@
     let feedItems = [];
     let lastScanTime = 0;
 
-    // Toggle camera on/off
     async function toggleCamera() {
         const btn = document.getElementById('btnToggleCamera');
         const placeholder = document.getElementById('scannerPlaceholder');
         const container = document.getElementById('scannerContainer');
 
         if (isCameraActive) {
-            // Stop camera
             if (html5QrCode) {
                 await html5QrCode.stop();
                 html5QrCode.clear();
@@ -163,14 +170,10 @@
             return;
         }
 
-        // Start camera
         try {
             placeholder.style.display = 'none';
-
-            // Hide default video and use html5-qrcode
             document.getElementById('videoElement').style.display = 'none';
 
-            // Create a scanning div
             let scanDiv = document.getElementById('qr-reader');
             if (!scanDiv) {
                 scanDiv = document.createElement('div');
@@ -184,31 +187,22 @@
 
             await html5QrCode.start(
                 { facingMode: "environment" },
-                {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 },
-                    aspectRatio: 1.0
-                },
+                { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
                 onScanSuccess,
-                (errorMessage) => {
-                    // Scan failure - ignore continuous errors
-                }
+                () => {}
             );
 
             isCameraActive = true;
-            btn.innerHTML = '<i data-lucide="video-off"></i> Stop Camera';
+            btn.innerHTML = '<i data-lucide="video-off"></i> Stop';
             lucide.createIcons();
             showToast('Camera started. Point at a QR code.', 'success');
 
         } catch (err) {
             console.error('Camera error:', err);
             let errorMsg = 'Failed to access camera. Please check permissions.';
-            
-            // Check if not localhost and not HTTPS
             if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
                 errorMsg = 'Camera blocked: Mobile browsers require HTTPS for camera access. Use ngrok or check SETUP_GUIDE.md.';
             }
-            
             showToast(errorMsg, 'error');
             placeholder.style.display = 'flex';
         }
@@ -217,29 +211,18 @@
     let lastScannedContent = '';
     let lastContentTime = 0;
 
-    // Called when QR is successfully scanned
     function onScanSuccess(decodedText) {
         const now = Date.now();
-        
-        // 1. Check if we are currently processing a request
         if (isProcessing) return;
-
-        // 2. Prevent same QR code from being scanned twice within 5 seconds (debounce same content)
-        if (decodedText === lastScannedContent && (now - lastContentTime < 5000)) {
-            return;
-        }
-
-        // 3. Global debounce: avoid any scan for 2 seconds
+        if (decodedText === lastScannedContent && (now - lastContentTime < 5000)) return;
         if (now - lastScanTime < 2000) return;
 
         lastScanTime = now;
         lastScannedContent = decodedText;
         lastContentTime = now;
-
         processQrData(decodedText);
     }
 
-    // Process manual input
     function processManualInput() {
         const input = document.getElementById('manualQrInput');
         if (input.value.trim()) {
@@ -248,10 +231,8 @@
         }
     }
 
-    // Process QR data -> send to server
     async function processQrData(qrData) {
         const sessionId = document.getElementById('sessionSelect')?.value;
-
         if (!sessionId) {
             showToast('Please select an active session first.', 'warning');
             return;
@@ -260,15 +241,10 @@
         isProcessing = true;
 
         try {
-            const result = await apiCall('/api/scan', 'POST', {
-                qr_data: qrData,
-                session_id: sessionId
-            });
-
+            const result = await apiCall('/api/scan', 'POST', { qr_data: qrData, session_id: sessionId });
             const resultArea = document.getElementById('scanResultArea');
 
             if (result.success) {
-                // Success - show Time In or Time Out
                 const isTimeOut = result.scan_type === 'time_out';
                 const toastType = result.fine > 0 ? 'warning' : 'success';
                 showToast(result.message, toastType);
@@ -276,22 +252,13 @@
                 addToFeed(result.student, true, '', result.status, result.fine);
                 refreshStats();
 
-                // Visual feedback: yellow if fined, green for Time In, blue for Time Out
                 const pulseColor = result.fine > 0 ? 'rgba(245, 158, 11, 0.5)' : (isTimeOut ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.4)');
                 pulseSuccess(pulseColor);
-
             } else {
-                // Error: duplicate, not_included, invalid_qr, etc.
                 const errorType = (result.error === 'duplicate' || result.error === 'not_included') ? 'warning' : 'error';
                 showToast(result.message, errorType === 'warning' ? 'warning' : 'error');
-
-                resultArea.innerHTML = buildScanResultCard(
-                    result.student || null, errorType, result.message
-                );
-
-                if (result.student) {
-                    addToFeed(result.student, false, result.message);
-                }
+                resultArea.innerHTML = buildScanResultCard(result.student || null, errorType, result.message);
+                if (result.student) addToFeed(result.student, false, result.message);
             }
 
         } catch (err) {
@@ -307,39 +274,37 @@
         if (!student) {
             return `
                 <div class="scan-result ${type}">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
                         <i data-lucide="${type === 'success' ? 'check-circle' : 'x-circle'}"
-                           style="width:24px;height:24px;color: ${type === 'success' ? 'var(--accent-success)' : type === 'warning' ? 'var(--accent-warning)' : 'var(--accent-danger)'}"></i>
-                        <span style="font-weight:600;">${message}</span>
+                           style="width:20px;height:20px;color: ${type === 'success' ? 'var(--accent-success)' : type === 'warning' ? 'var(--accent-warning)' : 'var(--accent-danger)'}"></i>
+                        <span style="font-weight:600;font-size:13px;">${message}</span>
                     </div>
                 </div>
             `;
         }
 
         const statusBadge = status
-            ? `<span class="badge ${status === 'Time In' ? 'badge-success' : 'badge-info'}" style="font-size:13px;padding:5px 14px;">
-                <i data-lucide="${status === 'Time In' ? 'log-in' : 'log-out'}" style="width:14px;height:14px;"></i>
+            ? `<span class="badge ${status === 'Time In' ? 'badge-success' : 'badge-info'}" style="font-size:11px;padding:4px 10px;">
+                <i data-lucide="${status === 'Time In' ? 'log-in' : 'log-out'}" style="width:12px;height:12px;"></i>
                 ${status}
                </span>`
             : '';
 
         const fineBadge = (fine && fine > 0)
-            ? `<div style="margin-top:10px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px;">
-                   <i data-lucide="alert-triangle" style="width:16px;height:16px;color:#d97706;"></i>
-                   <div>
-                       <span style="font-weight:700;color:#d97706;font-size:14px;">Fine: ₱${fine}</span>
-                       <span style="color:var(--text-muted);font-size:12px;margin-left:8px;">${fineReason || ''}</span>
-                   </div>
+            ? `<div style="margin-top:10px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius-sm);padding:8px 10px;display:flex;align-items:center;gap:6px;font-size:13px;">
+                   <i data-lucide="alert-triangle" style="width:14px;height:14px;color:#d97706;flex-shrink:0;"></i>
+                   <span style="font-weight:700;color:#d97706;">Fine: ₱${fine}</span>
+                   <span style="color:var(--text-muted);font-size:11px;">${fineReason || ''}</span>
                </div>`
             : '';
 
         return `
             <div class="scan-result ${type}">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-                    <div style="display:flex;align-items:center;gap:10px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+                    <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                         <i data-lucide="${type === 'success' ? 'check-circle' : type === 'warning' ? 'alert-triangle' : 'x-circle'}"
-                           style="width:24px;height:24px;color: ${type === 'success' ? 'var(--accent-success)' : type === 'warning' ? 'var(--accent-warning)' : 'var(--accent-danger)'}"></i>
-                        <span style="font-weight:600;font-size:15px;">${message}</span>
+                           style="width:20px;height:20px;flex-shrink:0;color: ${type === 'success' ? 'var(--accent-success)' : type === 'warning' ? 'var(--accent-warning)' : 'var(--accent-danger)'}"></i>
+                        <span style="font-weight:600;font-size:13px;">${message}</span>
                     </div>
                     ${statusBadge}
                 </div>
@@ -361,7 +326,6 @@
         const liveBadge = document.getElementById('liveBadge');
         liveBadge.style.display = 'inline-flex';
 
-        // Remove empty state if present
         const emptyState = feed.querySelector('.empty-state');
         if (emptyState) emptyState.remove();
 
@@ -371,8 +335,8 @@
         const isTimeOut = status === 'Time Out';
         const hasFineLate = fine > 0;
         const avatarClass = !success ? 'error' : (hasFineLate ? 'late' : (isTimeOut ? 'timeout' : 'success'));
-        const statusLabel = status ? `<span class="badge ${status === 'Time In' ? 'badge-success' : 'badge-info'}" style="font-size:10px;padding:2px 8px;margin-left:6px;">${status}</span>` : '';
-        const fineLabel = fine > 0 ? `<span class="badge" style="font-size:10px;padding:2px 8px;margin-left:4px;background:rgba(245,158,11,0.2);color:#d97706;border:1px solid rgba(245,158,11,0.4);">₱${fine} fine</span>` : '';
+        const statusLabel = status ? `<span class="badge ${status === 'Time In' ? 'badge-success' : 'badge-info'}" style="font-size:10px;padding:2px 6px;margin-left:4px;">${status}</span>` : '';
+        const fineLabel = fine > 0 ? `<span class="badge" style="font-size:10px;padding:2px 6px;margin-left:4px;background:rgba(245,158,11,0.15);color:#d97706;">₱${fine}</span>` : '';
 
         const item = document.createElement('div');
         item.className = 'feed-item';
@@ -400,7 +364,6 @@
         }, 500);
     }
 
-    // Refresh session stats
     async function refreshStats() {
         const sessionId = document.getElementById('sessionSelect')?.value;
         if (!sessionId) return;
@@ -410,36 +373,35 @@
             if (result.success) {
                 const area = document.getElementById('sessionStatsArea');
                 const stats = result.stats;
-                const session = result.session;
 
                 let courseBreakdown = '';
                 for (const [course, count] of Object.entries(stats.by_course || {})) {
                     courseBreakdown += `
                         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
-                            <span style="font-size:13px;color:var(--text-secondary);">${course}</span>
-                            <span style="font-size:13px;font-weight:600;color:var(--accent-primary);">${count}</span>
+                            <span style="font-size:12px;color:var(--text-secondary);">${course}</span>
+                            <span style="font-size:12px;font-weight:600;color:var(--accent-primary);">${count}</span>
                         </div>
                     `;
                 }
 
                 area.innerHTML = `
-                    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
-                        <div style="background:var(--bg-input);padding:16px;border-radius:var(--radius-md);text-align:center;">
-                            <div style="font-size:28px;font-weight:800;color:var(--accent-success);">${stats.time_in_count || 0}</div>
-                            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Time In</div>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+                        <div style="background:var(--bg-input);padding:12px;border-radius:var(--radius-sm);text-align:center;">
+                            <div style="font-size:24px;font-weight:800;color:var(--accent-success);">${stats.time_in_count || 0}</div>
+                            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Time In</div>
                         </div>
-                        <div style="background:var(--bg-input);padding:16px;border-radius:var(--radius-md);text-align:center;">
-                            <div style="font-size:28px;font-weight:800;color:var(--accent-info);">${stats.time_out_count || 0}</div>
-                            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Time Out</div>
+                        <div style="background:var(--bg-input);padding:12px;border-radius:var(--radius-sm);text-align:center;">
+                            <div style="font-size:24px;font-weight:800;color:var(--accent-info);">${stats.time_out_count || 0}</div>
+                            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Time Out</div>
                         </div>
-                        <div style="background:var(--bg-input);padding:16px;border-radius:var(--radius-md);text-align:center;">
-                            <div style="font-size:28px;font-weight:800;color:var(--accent-primary);">${stats.total_present}</div>
-                            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">Total Scans</div>
+                        <div style="background:var(--bg-input);padding:12px;border-radius:var(--radius-sm);text-align:center;">
+                            <div style="font-size:24px;font-weight:800;color:var(--accent-primary);">${stats.total_present}</div>
+                            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Total</div>
                         </div>
                     </div>
                     ${courseBreakdown ? `
-                        <div style="margin-top:8px;">
-                            <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">By Course</div>
+                        <div>
+                            <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">By Course</div>
                             ${courseBreakdown}
                         </div>
                     ` : ''}
@@ -450,10 +412,8 @@
         }
     }
 
-    // Auto-refresh stats when session is selected
     document.getElementById('sessionSelect')?.addEventListener('change', refreshStats);
 
-    // Allow Enter key on manual input
     document.getElementById('manualQrInput')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') processManualInput();
     });

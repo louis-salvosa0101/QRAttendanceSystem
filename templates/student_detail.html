@@ -3,63 +3,116 @@
 {% block page_title %}Student Profile{% endblock %}
 
 {% block content %}
+<style>
+    .profile-header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+    .profile-avatar {
+        width: 48px; height: 48px;
+        border-radius: var(--radius-md);
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 18px;
+        color: white;
+        flex-shrink: 0;
+    }
+    .profile-info { flex: 1; min-width: 180px; }
+    .profile-info h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .profile-meta {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .profile-meta span { display: flex; align-items: center; gap: 4px; }
+    .profile-meta i { width: 13px; height: 13px; color: var(--accent-primary); }
+    .profile-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    @media (max-width: 480px) {
+        .profile-actions { width: 100%; }
+        .profile-actions .btn { flex: 1; justify-content: center; min-width: 0; font-size: 11px; padding: 6px 8px; }
+    }
+    .summary-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px;
+        background: var(--bg-input);
+        border-radius: var(--radius-sm);
+    }
+    .summary-row + .summary-row { margin-top: 8px; }
+    .summary-label { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+    .summary-label i { width: 15px; height: 15px; }
+    .summary-value { font-size: 16px; font-weight: 700; }
+</style>
+
 <!-- Back Button -->
-<div style="margin-bottom:20px;">
+<div style="margin-bottom:16px;">
     <a href="/students" class="btn btn-sm btn-outline" id="btn-back">
         <i data-lucide="arrow-left"></i>
-        Back to Students
+        Back
     </a>
 </div>
 
 <!-- Student Info Card -->
 <div class="card mb-3">
     <div class="card-body">
-        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
-            <div style="width:56px;height:56px;border-radius:var(--radius-md);background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:white;flex-shrink:0;">
+        <div class="profile-header">
+            <div class="profile-avatar">
                 {{ student.name.split(' ')|map('first')|join('')|truncate(2, True, '')|upper }}
             </div>
-            <div style="flex:1;min-width:200px;">
-                <h2 style="font-size:20px;font-weight:700;margin-bottom:6px;">{{ student.name }}</h2>
-                <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--text-secondary);">
-                    <span style="display:flex;align-items:center;gap:6px;">
-                        <i data-lucide="hash" style="width:14px;height:14px;color:var(--accent-primary);"></i>
-                        <span style="font-family:'Fira Code',monospace;">{{ student.student_number }}</span>
+            <div class="profile-info">
+                <h2>{{ student.name }}</h2>
+                <div class="profile-meta">
+                    <span>
+                        <i data-lucide="hash"></i>
+                        <span style="font-family:'Inter',monospace;">{{ student.student_number }}</span>
                     </span>
-                    <span style="display:flex;align-items:center;gap:6px;">
-                        <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--accent-primary);"></i>
-                        {{ student.course or '---' }}
+                    <span>
+                        <i data-lucide="graduation-cap"></i>
+                        {{ student.course or '—' }}
                     </span>
-                    <span style="display:flex;align-items:center;gap:6px;">
-                        <i data-lucide="layers" style="width:14px;height:14px;color:var(--accent-primary);"></i>
-                        Year {{ student.year or '---' }} - Section {{ student.section or '---' }}
+                    <span>
+                        <i data-lucide="layers"></i>
+                        Yr {{ student.year or '—' }} - Sec {{ student.section or '—' }}
                     </span>
                 </div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button onclick="openAddFineModal()" class="btn btn-sm btn-primary" style="cursor:pointer;" id="btn-add-fine">
+            <div class="profile-actions">
+                <button onclick="openAddFineModal()" class="btn btn-sm btn-primary" id="btn-add-fine">
                     <i data-lucide="plus-circle"></i>
-                    Add Fine
+                    Fine
                 </button>
-                <button onclick="openPaymentModal()" class="btn btn-sm btn-outline" style="cursor:pointer;border-color:var(--accent-success);color:var(--accent-success);" id="btn-add-payment">
+                <button onclick="openPaymentModal()" class="btn btn-sm btn-outline" style="border-color:var(--accent-success);color:var(--accent-success);" id="btn-add-payment">
                     <i data-lucide="banknote"></i>
-                    Record Payment
+                    Pay
                 </button>
-                <button onclick="resetStudentData()" class="btn btn-sm btn-outline" style="cursor:pointer;border-color:var(--accent-danger);color:var(--accent-danger);" id="btn-reset-data">
+                <button onclick="resetStudentData()" class="btn btn-sm btn-outline" style="border-color:var(--accent-danger);color:var(--accent-danger);" id="btn-reset-data">
                     <i data-lucide="rotate-ccw"></i>
-                    Reset Data
+                    Reset
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Stats Row -->
-<div class="stats-grid mb-3" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+<!-- Stats -->
+<div class="stats-grid mb-3">
     <div class="stat-card purple">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
             <div>
                 <div class="stat-value">{{ summary.total_sessions }}</div>
-                <div class="stat-label">Total Sessions</div>
+                <div class="stat-label">Sessions</div>
             </div>
             <div class="stat-icon"><i data-lucide="calendar-check"></i></div>
         </div>
@@ -76,38 +129,7 @@
     <div class="stat-card amber">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
             <div>
-                <div class="stat-value">{{ summary.late_count }}</div>
-                <div class="stat-label">Fines Incurred</div>
-            </div>
-            <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
-        </div>
-    </div>
-    <div class="stat-card blue">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-            <div>
-                <div class="stat-value" style="color:{% if summary.total_fines > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">
-                    ₱{{ summary.total_fines }}
-                </div>
-                <div class="stat-label">Total Fines</div>
-            </div>
-            <div class="stat-icon"><i data-lucide="philippine-peso"></i></div>
-        </div>
-    </div>
-    <div class="stat-card green">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-            <div>
-                <div class="stat-value" style="color:var(--accent-success);">
-                    ₱{{ summary.total_paid }}
-                </div>
-                <div class="stat-label">Total Paid</div>
-            </div>
-            <div class="stat-icon"><i data-lucide="wallet"></i></div>
-        </div>
-    </div>
-    <div class="stat-card {% if summary.balance > 0 %}amber{% else %}green{% endif %}">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-            <div>
-                <div class="stat-value" style="color:{% if summary.balance > 0 %}var(--accent-danger){% elif summary.balance == 0 %}var(--accent-success){% else %}var(--accent-info){% endif %};">
+                <div class="stat-value" style="color:{% if summary.balance > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">
                     ₱{{ summary.balance }}
                 </div>
                 <div class="stat-label">Balance</div>
@@ -115,10 +137,19 @@
             <div class="stat-icon"><i data-lucide="scale"></i></div>
         </div>
     </div>
+    <div class="stat-card blue">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value" style="color:var(--accent-success);">₱{{ summary.total_paid }}</div>
+                <div class="stat-label">Total Paid</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="wallet"></i></div>
+        </div>
+    </div>
 </div>
 
 <div class="grid-2">
-    <!-- Fines Breakdown -->
+    <!-- Attendance Fines -->
     <div class="card mb-3">
         <div class="card-header">
             <div class="card-title">
@@ -126,10 +157,10 @@
                 Attendance Fines
             </div>
             {% if fines_list %}
-            <span class="badge badge-danger">{{ fines_list|length }} fine{{ 's' if fines_list|length != 1 }} &middot; ₱{{ summary.attendance_fines }}</span>
+            <span class="badge badge-danger">{{ fines_list|length }} · ₱{{ summary.attendance_fines }}</span>
             {% endif %}
         </div>
-        <div class="card-body">
+        <div class="card-body" style="{% if fines_list %}padding:0;{% endif %}">
             {% if fines_list %}
             <div class="table-container">
                 <table>
@@ -144,16 +175,12 @@
                     <tbody>
                         {% for f in fines_list %}
                         <tr>
-                            <td style="font-size:13px;font-family:'Fira Code',monospace;">{{ f.date[:16] }}</td>
-                            <td><span class="badge badge-info">{{ f.session_id }}</span></td>
+                            <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ f.date[:16] }}</td>
+                            <td><span class="badge badge-info" style="font-size:10px;">{{ f.session_id }}</span></td>
                             <td>
-                                {% if f.status == 'Absent' %}
-                                    <span class="badge badge-danger">Absent</span>
-                                {% elif 'Partial' in f.status %}
-                                    <span class="badge badge-warning">Partial</span>
-                                {% else %}
-                                    <span class="badge badge-warning">Late</span>
-                                {% endif %}
+                                {% if f.status == 'Absent' %}<span class="badge badge-danger">Absent</span>
+                                {% elif 'Partial' in f.status %}<span class="badge badge-warning">Partial</span>
+                                {% else %}<span class="badge badge-warning">Late</span>{% endif %}
                             </td>
                             <td style="font-weight:700;color:var(--accent-danger);">₱{{ f.fine }}</td>
                         </tr>
@@ -162,10 +189,9 @@
                 </table>
             </div>
             {% else %}
-            <div class="empty-state" style="padding:30px;">
-                <i data-lucide="check-circle" style="width:40px;height:40px;color:var(--accent-success);opacity:0.6;"></i>
-                <h3 style="font-size:15px;margin-top:10px;">No Attendance Fines</h3>
-                <p style="font-size:13px;">This student has no attendance-related fines.</p>
+            <div class="empty-state" style="padding:24px;">
+                <i data-lucide="check-circle" style="width:32px;height:32px;color:var(--accent-success);opacity:0.5;"></i>
+                <h3 style="font-size:14px;margin-top:8px;">No Attendance Fines</h3>
             </div>
             {% endif %}
         </div>
@@ -178,21 +204,20 @@
                 <i data-lucide="file-pen-line"></i>
                 Manual Fines
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
+            <div style="display:flex;align-items:center;gap:6px;">
                 {% if manual_fines %}
-                <span class="badge badge-danger">{{ manual_fines|length }} fine{{ 's' if manual_fines|length != 1 }} &middot; ₱{{ summary.manual_fines }}</span>
-                <button onclick="clearAllManualFines()" class="btn btn-sm" style="padding:4px 10px;font-size:12px;background:none;border:1px solid var(--accent-danger);color:var(--accent-danger);cursor:pointer;" title="Delete all manual fines">
-                    <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
-                    Clear All
+                <span class="badge badge-danger">₱{{ summary.manual_fines }}</span>
+                <button onclick="clearAllManualFines()" class="btn btn-sm" style="padding:3px 8px;background:none;border:1px solid var(--accent-danger);color:var(--accent-danger);cursor:pointer;font-size:11px;">
+                    Clear
                 </button>
                 {% endif %}
-                <button onclick="openAddFineModal()" class="btn btn-sm btn-primary" style="padding:4px 10px;font-size:12px;cursor:pointer;">
-                    <i data-lucide="plus" style="width:14px;height:14px;"></i>
+                <button onclick="openAddFineModal()" class="btn btn-sm btn-primary" style="padding:3px 8px;font-size:11px;">
+                    <i data-lucide="plus" style="width:12px;height:12px;"></i>
                     Add
                 </button>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="{% if manual_fines %}padding:0;{% endif %}">
             {% if manual_fines %}
             <div class="table-container">
                 <table>
@@ -202,19 +227,19 @@
                             <th>Reason</th>
                             <th>Amount</th>
                             <th>By</th>
-                            <th style="width:40px;"></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for mf in manual_fines %}
                         <tr>
-                            <td style="font-size:13px;font-family:'Fira Code',monospace;white-space:nowrap;">{{ mf.created_at[:16] }}</td>
-                            <td style="font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ mf.reason }}">{{ mf.reason }}</td>
-                            <td style="font-weight:700;color:var(--accent-danger);white-space:nowrap;">₱{{ mf.amount }}</td>
-                            <td style="font-size:12px;color:var(--text-muted);">{{ mf.created_by or '—' }}</td>
+                            <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ mf.created_at[:16] }}</td>
+                            <td style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ mf.reason }}">{{ mf.reason }}</td>
+                            <td style="font-weight:700;color:var(--accent-danger);">₱{{ mf.amount }}</td>
+                            <td style="font-size:11px;color:var(--text-muted);">{{ mf.created_by or '—' }}</td>
                             <td>
-                                <button onclick="deleteManualFine({{ mf.id }})" class="btn btn-sm" style="padding:4px 6px;background:none;color:var(--text-muted);cursor:pointer;" title="Remove fine">
-                                    <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                                <button onclick="deleteManualFine({{ mf.id }})" class="btn btn-sm" style="padding:3px 5px;background:none;color:var(--text-muted);cursor:pointer;">
+                                    <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
                                 </button>
                             </td>
                         </tr>
@@ -223,17 +248,15 @@
                 </table>
             </div>
             {% else %}
-            <div class="empty-state" style="padding:30px;">
-                <i data-lucide="check-circle" style="width:40px;height:40px;color:var(--accent-success);opacity:0.6;"></i>
-                <h3 style="font-size:15px;margin-top:10px;">No Manual Fines</h3>
-                <p style="font-size:13px;">No manually-added fines for this student.</p>
+            <div class="empty-state" style="padding:24px;">
+                <i data-lucide="check-circle" style="width:32px;height:32px;color:var(--accent-success);opacity:0.5;"></i>
+                <h3 style="font-size:14px;margin-top:8px;">No Manual Fines</h3>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
 
-<!-- Payments & Attendance Summary -->
 <div class="grid-2">
     <!-- Payments -->
     <div class="card mb-3">
@@ -242,17 +265,17 @@
                 <i data-lucide="wallet"></i>
                 Payments
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
+            <div style="display:flex;align-items:center;gap:6px;">
                 {% if payments %}
-                <span class="badge" style="background:rgba(16,185,129,0.15);color:var(--accent-success);">₱{{ summary.total_paid }} paid</span>
+                <span class="badge" style="background:rgba(16,185,129,0.12);color:var(--accent-success);">₱{{ summary.total_paid }}</span>
                 {% endif %}
-                <button onclick="openPaymentModal()" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;border-color:var(--accent-success);color:var(--accent-success);cursor:pointer;">
-                    <i data-lucide="plus" style="width:14px;height:14px;"></i>
+                <button onclick="openPaymentModal()" class="btn btn-sm btn-outline" style="padding:3px 8px;font-size:11px;border-color:var(--accent-success);color:var(--accent-success);">
+                    <i data-lucide="plus" style="width:12px;height:12px;"></i>
                     Pay
                 </button>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="{% if payments %}padding:0;{% endif %}">
             {% if payments %}
             <div class="table-container">
                 <table>
@@ -262,19 +285,19 @@
                             <th>Amount</th>
                             <th>Notes</th>
                             <th>By</th>
-                            <th style="width:40px;"></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for p in payments %}
                         <tr>
-                            <td style="font-size:13px;font-family:'Fira Code',monospace;white-space:nowrap;">{{ p.created_at[:16] }}</td>
-                            <td style="font-weight:700;color:var(--accent-success);white-space:nowrap;">₱{{ p.amount }}</td>
-                            <td style="font-size:12px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ p.notes or '' }}">{{ p.notes or '—' }}</td>
-                            <td style="font-size:12px;color:var(--text-muted);">{{ p.created_by or '—' }}</td>
+                            <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ p.created_at[:16] }}</td>
+                            <td style="font-weight:700;color:var(--accent-success);">₱{{ p.amount }}</td>
+                            <td style="font-size:11px;color:var(--text-muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ p.notes or '' }}">{{ p.notes or '—' }}</td>
+                            <td style="font-size:11px;color:var(--text-muted);">{{ p.created_by or '—' }}</td>
                             <td>
-                                <button onclick="deletePayment({{ p.id }})" class="btn btn-sm" style="padding:4px 6px;background:none;color:var(--text-muted);cursor:pointer;" title="Remove payment">
-                                    <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                                <button onclick="deletePayment({{ p.id }})" class="btn btn-sm" style="padding:3px 5px;background:none;color:var(--text-muted);cursor:pointer;">
+                                    <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
                                 </button>
                             </td>
                         </tr>
@@ -283,10 +306,9 @@
                 </table>
             </div>
             {% else %}
-            <div class="empty-state" style="padding:30px;">
-                <i data-lucide="piggy-bank" style="width:40px;height:40px;color:var(--text-muted);opacity:0.5;"></i>
-                <h3 style="font-size:15px;margin-top:10px;">No Payments</h3>
-                <p style="font-size:13px;">No fine payments recorded yet.</p>
+            <div class="empty-state" style="padding:24px;">
+                <i data-lucide="piggy-bank" style="width:32px;height:32px;color:var(--text-muted);opacity:0.4;"></i>
+                <h3 style="font-size:14px;margin-top:8px;">No Payments</h3>
             </div>
             {% endif %}
         </div>
@@ -297,61 +319,59 @@
         <div class="card-header">
             <div class="card-title">
                 <i data-lucide="bar-chart-3"></i>
-                Attendance Summary
+                Summary
             </div>
         </div>
         <div class="card-body">
-            <div style="display:flex;flex-direction:column;gap:16px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-input);border-radius:var(--radius-sm);">
-                    <span style="font-size:14px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;">
-                        <i data-lucide="log-in" style="width:16px;height:16px;color:var(--accent-success);"></i>
-                        Time In Records
-                    </span>
-                    <span style="font-size:18px;font-weight:700;">{{ summary.time_in_count }}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-input);border-radius:var(--radius-sm);">
-                    <span style="font-size:14px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;">
-                        <i data-lucide="log-out" style="width:16px;height:16px;color:var(--accent-info);"></i>
-                        Time Out Records
-                    </span>
-                    <span style="font-size:18px;font-weight:700;">{{ summary.time_out_count }}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-input);border-radius:var(--radius-sm);">
-                    <span style="font-size:14px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;">
-                        <i data-lucide="user-x" style="width:16px;height:16px;color:var(--accent-danger);"></i>
-                        Absences
-                    </span>
-                    <span style="font-size:18px;font-weight:700;color:{% if summary.absent_count > 0 %}var(--accent-danger){% else %}inherit{% endif %};">{{ summary.absent_count }}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-input);border-radius:var(--radius-sm);">
-                    <span style="font-size:14px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;">
-                        <i data-lucide="alert-triangle" style="width:16px;height:16px;color:var(--accent-warning);"></i>
-                        Partial Scans
-                    </span>
-                    <span style="font-size:18px;font-weight:700;">{{ summary.partial_count }}</span>
-                </div>
+            <div class="summary-row">
+                <span class="summary-label">
+                    <i data-lucide="log-in" style="color:var(--accent-success);"></i>
+                    Time In
+                </span>
+                <span class="summary-value">{{ summary.time_in_count }}</span>
+            </div>
+            <div class="summary-row">
+                <span class="summary-label">
+                    <i data-lucide="log-out" style="color:var(--accent-info);"></i>
+                    Time Out
+                </span>
+                <span class="summary-value">{{ summary.time_out_count }}</span>
+            </div>
+            <div class="summary-row">
+                <span class="summary-label">
+                    <i data-lucide="user-x" style="color:var(--accent-danger);"></i>
+                    Absences
+                </span>
+                <span class="summary-value" style="color:{% if summary.absent_count > 0 %}var(--accent-danger){% else %}inherit{% endif %};">{{ summary.absent_count }}</span>
+            </div>
+            <div class="summary-row">
+                <span class="summary-label">
+                    <i data-lucide="alert-triangle" style="color:var(--accent-warning);"></i>
+                    Partial Scans
+                </span>
+                <span class="summary-value">{{ summary.partial_count }}</span>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Full Attendance History -->
+<!-- Attendance History -->
 <div class="card">
     <div class="card-header">
         <div class="card-title">
             <i data-lucide="history"></i>
-            Attendance History
+            History
         </div>
         <span class="badge badge-info">{{ records|length }} records</span>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="{% if records %}padding:0;{% endif %}">
         {% if records %}
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
                         <th>Date & Time</th>
-                        <th>Session ID</th>
+                        <th>Session</th>
                         <th>Status</th>
                         <th>Fine</th>
                         <th>Reason</th>
@@ -360,20 +380,14 @@
                 <tbody>
                     {% for r in records|reverse %}
                     <tr>
-                        <td style="font-size:13px;font-family:'Fira Code',monospace;">{{ r.datetime }}</td>
-                        <td><span class="badge badge-info">{{ r.session_id }}</span></td>
+                        <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.datetime }}</td>
+                        <td><span class="badge badge-info" style="font-size:10px;">{{ r.session_id }}</span></td>
                         <td>
-                            {% if r.status == 'Time In' %}
-                                <span class="badge badge-success">{{ r.status }}</span>
-                            {% elif r.status == 'Time Out' %}
-                                <span class="badge" style="background:rgba(59,130,246,0.15);color:var(--accent-info);">{{ r.status }}</span>
-                            {% elif r.status == 'Absent' %}
-                                <span class="badge badge-danger">{{ r.status }}</span>
-                            {% elif 'Partial' in r.status %}
-                                <span class="badge badge-warning">Partial</span>
-                            {% else %}
-                                <span class="badge">{{ r.status }}</span>
-                            {% endif %}
+                            {% if r.status == 'Time In' %}<span class="badge badge-success">In</span>
+                            {% elif r.status == 'Time Out' %}<span class="badge badge-info">Out</span>
+                            {% elif r.status == 'Absent' %}<span class="badge badge-danger">Absent</span>
+                            {% elif 'Partial' in r.status %}<span class="badge badge-warning">Partial</span>
+                            {% else %}<span class="badge">{{ r.status }}</span>{% endif %}
                         </td>
                         <td>
                             {% if r.fine and r.fine > 0 %}
@@ -382,7 +396,7 @@
                                 <span style="color:var(--text-muted);">—</span>
                             {% endif %}
                         </td>
-                        <td style="font-size:12px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.fine_reason or '' }}">
+                        <td style="font-size:11px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.fine_reason or '' }}">
                             {{ r.fine_reason or '—' }}
                         </td>
                     </tr>
@@ -402,30 +416,30 @@
 
 <!-- Add Fine Modal -->
 <div class="modal-overlay" id="addFineModal">
-    <div class="modal" style="max-width:440px;">
+    <div class="modal" style="max-width:420px;">
         <div class="modal-header">
             <h3 class="modal-title">
-                <i data-lucide="plus-circle" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;color:var(--accent-danger);"></i>
-                Add Manual Fine
+                <i data-lucide="plus-circle" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;color:var(--accent-danger);"></i>
+                Add Fine
             </h3>
             <button class="modal-close" onclick="closeAddFineModal()"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
                 Adding fine to <strong>{{ student.name }}</strong> ({{ student.student_number }})
             </p>
             <form id="addFineForm" onsubmit="submitAddFine(event)">
-                <div class="form-group" style="margin-bottom:16px;">
-                    <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Amount (₱)</label>
-                    <input type="number" id="fineAmount" min="1" step="1" required class="form-input" placeholder="e.g. 50" style="width:100%;">
+                <div class="form-group">
+                    <label class="form-label">Amount (₱)</label>
+                    <input type="number" id="fineAmount" min="1" step="1" required class="form-input" placeholder="e.g. 50">
                 </div>
-                <div class="form-group" style="margin-bottom:16px;">
-                    <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Reason</label>
-                    <input type="text" id="fineReason" required class="form-input" placeholder="e.g. Missing uniform, late submission" style="width:100%;">
+                <div class="form-group">
+                    <label class="form-label">Reason</label>
+                    <input type="text" id="fineReason" required class="form-input" placeholder="e.g. Missing uniform">
                 </div>
-                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
                     <button type="button" class="btn btn-sm btn-outline" onclick="closeAddFineModal()">Cancel</button>
-                    <button type="submit" class="btn btn-sm btn-primary" id="fineSubmitBtn" style="background:var(--accent-danger);border-color:var(--accent-danger);">
+                    <button type="submit" class="btn btn-sm btn-danger" id="fineSubmitBtn">
                         <i data-lucide="plus-circle"></i>
                         Add Fine
                     </button>
@@ -437,39 +451,37 @@
 
 <!-- Payment Modal -->
 <div class="modal-overlay" id="paymentModal">
-    <div class="modal" style="max-width:440px;">
+    <div class="modal" style="max-width:420px;">
         <div class="modal-header">
             <h3 class="modal-title">
-                <i data-lucide="banknote" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;color:var(--accent-success);"></i>
+                <i data-lucide="banknote" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;color:var(--accent-success);"></i>
                 Record Payment
             </h3>
             <button class="modal-close" onclick="closePaymentModal()"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">
-                Recording payment for <strong>{{ student.name }}</strong> ({{ student.student_number }})
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+                Payment for <strong>{{ student.name }}</strong>
             </p>
-            <div style="display:flex;gap:12px;margin-bottom:16px;padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);font-size:13px;">
-                <span>Total fines: <strong style="color:var(--accent-danger);">₱{{ summary.total_fines }}</strong></span>
-                <span>|</span>
+            <div style="display:flex;gap:8px;margin-bottom:14px;padding:10px;background:var(--bg-input);border-radius:var(--radius-sm);font-size:12px;flex-wrap:wrap;">
+                <span>Fines: <strong style="color:var(--accent-danger);">₱{{ summary.total_fines }}</strong></span>
                 <span>Paid: <strong style="color:var(--accent-success);">₱{{ summary.total_paid }}</strong></span>
-                <span>|</span>
                 <span>Balance: <strong style="color:{% if summary.balance > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">₱{{ summary.balance }}</strong></span>
             </div>
             <form id="paymentForm" onsubmit="submitPayment(event)">
-                <div class="form-group" style="margin-bottom:16px;">
-                    <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Amount (₱)</label>
-                    <input type="number" id="paymentAmount" min="1" step="1" required class="form-input" placeholder="e.g. 100" style="width:100%;">
+                <div class="form-group">
+                    <label class="form-label">Amount (₱)</label>
+                    <input type="number" id="paymentAmount" min="1" step="1" required class="form-input" placeholder="e.g. 100">
                 </div>
-                <div class="form-group" style="margin-bottom:16px;">
-                    <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Notes (optional)</label>
-                    <input type="text" id="paymentNotes" class="form-input" placeholder="e.g. Partial payment, paid in cash" style="width:100%;">
+                <div class="form-group">
+                    <label class="form-label">Notes (optional)</label>
+                    <input type="text" id="paymentNotes" class="form-input" placeholder="e.g. Cash payment">
                 </div>
-                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
                     <button type="button" class="btn btn-sm btn-outline" onclick="closePaymentModal()">Cancel</button>
-                    <button type="submit" class="btn btn-sm btn-primary" id="paymentSubmitBtn" style="background:var(--accent-success);border-color:var(--accent-success);">
+                    <button type="submit" class="btn btn-sm btn-success" id="paymentSubmitBtn">
                         <i data-lucide="check"></i>
-                        Record Payment
+                        Record
                     </button>
                 </div>
             </form>
@@ -514,16 +526,8 @@
         const amount = parseInt(document.getElementById('fineAmount').value);
         const reason = document.getElementById('fineReason').value.trim();
 
-        if (!amount || amount <= 0) {
-            showToast('Please enter a valid amount.', 'error');
-            btn.disabled = false;
-            return;
-        }
-        if (!reason) {
-            showToast('Please enter a reason.', 'error');
-            btn.disabled = false;
-            return;
-        }
+        if (!amount || amount <= 0) { showToast('Enter a valid amount.', 'error'); btn.disabled = false; return; }
+        if (!reason) { showToast('Enter a reason.', 'error'); btn.disabled = false; return; }
 
         try {
             const data = await apiCall(`/api/students/${STUDENT_NUMBER}/fines`, 'POST', { amount, reason });
@@ -548,11 +552,7 @@
         const amount = parseInt(document.getElementById('paymentAmount').value);
         const notes = document.getElementById('paymentNotes').value.trim();
 
-        if (!amount || amount <= 0) {
-            showToast('Please enter a valid amount.', 'error');
-            btn.disabled = false;
-            return;
-        }
+        if (!amount || amount <= 0) { showToast('Enter a valid amount.', 'error'); btn.disabled = false; return; }
 
         try {
             const data = await apiCall(`/api/students/${STUDENT_NUMBER}/payments`, 'POST', { amount, notes });
@@ -573,74 +573,44 @@
         if (!confirm('Remove this fine?')) return;
         try {
             const data = await apiCall(`/api/students/${STUDENT_NUMBER}/fines/${fineId}`, 'DELETE');
-            if (data.success) {
-                showToast(data.message, 'success');
-                setTimeout(() => location.reload(), 600);
-            } else {
-                showToast(data.message, 'error');
-            }
-        } catch (err) {
-            showToast('Failed to remove fine.', 'error');
-        }
+            if (data.success) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 600); }
+            else { showToast(data.message, 'error'); }
+        } catch (err) { showToast('Failed to remove fine.', 'error'); }
     }
 
     async function clearAllManualFines() {
-        if (!confirm('Delete ALL manual fines for this student? This cannot be undone.')) return;
+        if (!confirm('Delete ALL manual fines for this student?')) return;
         try {
             const data = await apiCall(`/api/students/${STUDENT_NUMBER}/fines/clear`, 'DELETE');
-            if (data.success) {
-                showToast(data.message, 'success');
-                setTimeout(() => location.reload(), 600);
-            } else {
-                showToast(data.message, 'error');
-            }
-        } catch (err) {
-            showToast('Failed to clear fines.', 'error');
-        }
+            if (data.success) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 600); }
+            else { showToast(data.message, 'error'); }
+        } catch (err) { showToast('Failed to clear fines.', 'error'); }
     }
 
     async function deletePayment(paymentId) {
-        if (!confirm('Remove this payment record?')) return;
+        if (!confirm('Remove this payment?')) return;
         try {
             const data = await apiCall(`/api/students/${STUDENT_NUMBER}/payments/${paymentId}`, 'DELETE');
-            if (data.success) {
-                showToast(data.message, 'success');
-                setTimeout(() => location.reload(), 600);
-            } else {
-                showToast(data.message, 'error');
-            }
-        } catch (err) {
-            showToast('Failed to remove payment.', 'error');
-        }
+            if (data.success) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 600); }
+            else { showToast(data.message, 'error'); }
+        } catch (err) { showToast('Failed to remove payment.', 'error'); }
     }
 
     async function resetStudentData() {
-        if (!confirm('⚠️ Reset ALL data for this student?\n\nThis will permanently delete:\n• All attendance records\n• All manual fines\n• All payment records\n• All session scan history\n\nThis action cannot be undone.')) return;
-        if (!confirm('Are you absolutely sure? This cannot be reversed.')) return;
+        if (!confirm('Reset ALL data for this student? This permanently deletes attendance records, fines, and payments.')) return;
+        if (!confirm('Are you absolutely sure?')) return;
 
         const btn = document.getElementById('btn-reset-data');
         btn.disabled = true;
         try {
             const data = await apiCall(`/api/students/${STUDENT_NUMBER}/reset`, 'DELETE');
-            if (data.success) {
-                showToast(data.message, 'success');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                showToast(data.message, 'error');
-                btn.disabled = false;
-            }
-        } catch (err) {
-            showToast('Failed to reset student data.', 'error');
-            btn.disabled = false;
-        }
+            if (data.success) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 1000); }
+            else { showToast(data.message, 'error'); btn.disabled = false; }
+        } catch (err) { showToast('Failed to reset.', 'error'); btn.disabled = false; }
     }
 
-    document.getElementById('addFineModal')?.addEventListener('click', function(e) {
-        if (e.target === this) closeAddFineModal();
-    });
-    document.getElementById('paymentModal')?.addEventListener('click', function(e) {
-        if (e.target === this) closePaymentModal();
-    });
+    document.getElementById('addFineModal')?.addEventListener('click', function(e) { if (e.target === this) closeAddFineModal(); });
+    document.getElementById('paymentModal')?.addEventListener('click', function(e) { if (e.target === this) closePaymentModal(); });
 
     lucide.createIcons();
 </script>

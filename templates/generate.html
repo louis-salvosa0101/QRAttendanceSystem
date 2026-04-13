@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Generate QR Codes - QR Attendance System{% endblock %}
-{% block page_title %}Generate QR Codes{% endblock %}
+{% block page_title %}Generate QR{% endblock %}
 
 {% block content %}
 <div class="grid-2">
-    <!-- Single QR Generation -->
+    <!-- Single QR -->
     <div class="card">
         <div class="card-header">
             <div class="card-title">
@@ -42,70 +42,64 @@
                 </button>
             </form>
 
-            <!-- Preview -->
             <div id="qrPreview" class="mt-3 text-center hidden">
-                <img id="qrPreviewImg" src="" alt="Generated QR" style="max-width:280px;border-radius:var(--radius-md);border:1px solid var(--border);">
+                <img id="qrPreviewImg" src="" alt="Generated QR" style="max-width:240px;border-radius:var(--radius-sm);border:1px solid var(--border);">
                 <div class="mt-1">
                     <a id="qrDownloadLink" class="btn btn-sm btn-outline" download>
                         <i data-lucide="download"></i>
-                        Download QR
+                        Download
                     </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Batch Generation -->
+    <!-- Batch -->
     <div>
         <div class="card mb-2">
             <div class="card-header">
                 <div class="card-title">
                     <i data-lucide="file-up"></i>
-                    Batch Generate from Excel
+                    Batch Generate
                 </div>
             </div>
             <div class="card-body">
                 <div class="alert alert-info mb-2">
                     <i data-lucide="info"></i>
                     <div>
-                        <strong>Excel Format Required:</strong><br>
-                        Columns: <code style="font-family:'Fira Code',monospace;font-size:12px;background:rgba(59,130,246,0.2);padding:2px 6px;border-radius:4px;">
+                        <strong>Excel columns:</strong>
+                        <code style="font-size:11px;background:rgba(59,130,246,0.15);padding:2px 6px;border-radius:4px;">
                         Name | Student Number | Course | Year | Section</code>
                     </div>
                 </div>
 
-                <!-- File Upload Area -->
                 <div class="file-upload" id="fileUploadArea"
                      onclick="document.getElementById('excelFileInput').click()"
                      ondragover="handleDragOver(event)"
                      ondragleave="handleDragLeave(event)"
                      ondrop="handleDrop(event)">
                     <i data-lucide="upload-cloud"></i>
-                    <div class="file-upload-text">
-                        <strong>Click to upload</strong> or drag & drop
-                    </div>
+                    <div class="file-upload-text"><strong>Click to upload</strong> or drag & drop</div>
                     <div class="file-upload-hint">.xlsx or .xls files only</div>
                 </div>
-                <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none"
-                       onchange="uploadExcel()">
+                <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel()">
 
                 <div id="uploadProgress" class="hidden mt-2">
-                    <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
                         <div class="spinner"></div>
-                        <span style="font-size:14px;color:var(--text-secondary);">Generating QR codes...</span>
+                        <span style="font-size:13px;color:var(--text-secondary);">Generating...</span>
                     </div>
                 </div>
 
                 <div id="uploadResult" class="mt-2"></div>
 
-                <!-- Sample File Generator -->
-                <div class="mt-3" style="border-top:1px solid var(--border);padding-top:16px;">
-                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">
-                        Need a template? Generate a sample Excel file with test data.
+                <div class="mt-2" style="border-top:1px solid var(--border);padding-top:12px;">
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">
+                        Need a template?
                     </p>
                     <button class="btn btn-sm btn-outline" onclick="generateSampleFile()" id="btn-sample-file">
                         <i data-lucide="file-plus"></i>
-                        Generate Sample File
+                        Sample File
                     </button>
                 </div>
             </div>
@@ -116,70 +110,50 @@
             <div class="card-header">
                 <div class="card-title">
                     <i data-lucide="shield"></i>
-                    Security Features
+                    Security
                 </div>
             </div>
             <div class="card-body" style="padding:0;">
-                <div style="display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);">
-                    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                        <i data-lucide="lock" style="width:16px;height:16px;color:var(--accent-success);"></i>
+                {% set features = [
+                    ('lock', 'AES-256 Encryption', 'QR data encrypted.'),
+                    ('fingerprint', 'Integrity Hash', 'SHA-256 ensures integrity.'),
+                    ('ban', 'Duplicate Prevention', 'One scan per student per session.'),
+                    ('timer', 'Session Expiry', 'Auto-expire after duration.')
+                ] %}
+                {% for icon, title, desc in features %}
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;{% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
+                    <div style="width:28px;height:28px;border-radius:6px;background:rgba(16,185,129,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i data-lucide="{{ icon }}" style="width:14px;height:14px;color:var(--accent-success);"></i>
                     </div>
                     <div>
-                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">AES-256 Encryption</div>
-                        <div style="font-size:12px;color:var(--text-muted);">QR data is encrypted to prevent tampering.</div>
+                        <div style="font-size:12px;font-weight:600;color:var(--text-primary);">{{ title }}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">{{ desc }}</div>
                     </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);">
-                    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                        <i data-lucide="fingerprint" style="width:16px;height:16px;color:var(--accent-success);"></i>
-                    </div>
-                    <div>
-                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Integrity Hash</div>
-                        <div style="font-size:12px;color:var(--text-muted);">SHA-256 hash ensures data integrity.</div>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);">
-                    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                        <i data-lucide="ban" style="width:16px;height:16px;color:var(--accent-success);"></i>
-                    </div>
-                    <div>
-                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Duplicate Prevention</div>
-                        <div style="font-size:12px;color:var(--text-muted);">One scan per student per session.</div>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:12px;padding:14px 24px;">
-                    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                        <i data-lucide="timer" style="width:16px;height:16px;color:var(--accent-success);"></i>
-                    </div>
-                    <div>
-                        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Session Expiry</div>
-                        <div style="font-size:12px;color:var(--text-muted);">Auto-expire after configured duration.</div>
-                    </div>
-                </div>
+                {% endfor %}
             </div>
         </div>
     </div>
 </div>
 
-<!-- Generated QR Codes Gallery -->
+<!-- QR Gallery -->
 <div class="card mt-3">
     <div class="card-header">
         <div class="card-title">
             <i data-lucide="images"></i>
-            Generated QR Codes
+            QR Codes
         </div>
-        <div style="display:flex;gap:8px;">
+        <div class="action-bar">
             <a href="/api/qrcodes/download-all" class="btn btn-sm btn-success" id="btn-download-all-qr">
                 <i data-lucide="download"></i>
                 Download All
             </a>
             <button class="btn btn-sm btn-danger" onclick="clearAllQrCodes()" id="btn-clear-all-qr">
                 <i data-lucide="trash-2"></i>
-                Clear All
+                Clear
             </button>
             <button class="btn btn-sm btn-outline" onclick="refreshQrList()" id="btn-refresh-qr">
                 <i data-lucide="refresh-cw"></i>
-                Refresh
             </button>
         </div>
     </div>
@@ -195,7 +169,7 @@
             {% else %}
                 <div class="empty-state" style="grid-column: 1 / -1;">
                     <i data-lucide="image"></i>
-                    <h3>No QR Codes Generated</h3>
+                    <h3>No QR Codes</h3>
                     <p>Generate QR codes above to see them here.</p>
                 </div>
             {% endif %}
@@ -206,7 +180,6 @@
 
 {% block scripts %}
 <script>
-    // Single QR generation
     async function generateSingleQR(e) {
         e.preventDefault();
         const data = {
@@ -221,16 +194,12 @@
             const result = await apiCall('/api/generate/single', 'POST', data);
             if (result.success) {
                 showToast(result.message, 'success');
-
-                // Show preview
                 const preview = document.getElementById('qrPreview');
                 const img = document.getElementById('qrPreviewImg');
                 const link = document.getElementById('qrDownloadLink');
                 img.src = result.url;
                 link.href = result.url;
                 preview.classList.remove('hidden');
-
-                // Refresh gallery
                 refreshQrList();
             } else {
                 showToast(result.message, 'error');
@@ -241,7 +210,6 @@
         lucide.createIcons();
     }
 
-    // Batch upload
     async function uploadExcel() {
         const fileInput = document.getElementById('excelFileInput');
         const file = fileInput.files[0];
@@ -256,10 +224,7 @@
         formData.append('file', file);
 
         try {
-            const response = await fetch('/api/generate/batch', {
-                method: 'POST',
-                body: formData
-            });
+            const response = await fetch('/api/generate/batch', { method: 'POST', body: formData });
             const result = await response.json();
 
             progress.classList.add('hidden');
@@ -272,20 +237,13 @@
                         <div>
                             <strong>${result.results.success} QR codes generated</strong>
                             ${result.results.errors > 0 ? `<br>${result.results.errors} errors` : ''}
-                            ${result.results.error_details.length > 0 ?
-                                '<br><small>' + result.results.error_details.join('<br>') + '</small>' : ''}
                         </div>
                     </div>
                 `;
                 refreshQrList();
             } else {
                 showToast(result.message, 'error');
-                resultDiv.innerHTML = `
-                    <div class="alert alert-error">
-                        <i data-lucide="x-circle"></i>
-                        ${result.message}
-                    </div>
-                `;
+                resultDiv.innerHTML = `<div class="alert alert-error"><i data-lucide="x-circle"></i>${result.message}</div>`;
             }
         } catch(e) {
             progress.classList.add('hidden');
@@ -294,50 +252,31 @@
         lucide.createIcons();
     }
 
-    // Drag and drop
-    function handleDragOver(e) {
-        e.preventDefault();
-        e.currentTarget.classList.add('dragover');
-    }
-
-    function handleDragLeave(e) {
-        e.currentTarget.classList.remove('dragover');
-    }
-
+    function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+    function handleDragLeave(e) { e.currentTarget.classList.remove('dragover'); }
     function handleDrop(e) {
         e.preventDefault();
         e.currentTarget.classList.remove('dragover');
-        const fileInput = document.getElementById('excelFileInput');
-        fileInput.files = e.dataTransfer.files;
+        document.getElementById('excelFileInput').files = e.dataTransfer.files;
         uploadExcel();
     }
 
-    // Sample file
     async function generateSampleFile() {
         try {
             const result = await apiCall('/api/generate/sample', 'POST');
-            if (result.success) {
-                showToast('Sample master list created in data folder!', 'success');
-            }
+            if (result.success) showToast('Sample file created!', 'success');
         } catch(e) {
-            showToast('Error generating sample.', 'error');
+            showToast('Error.', 'error');
         }
     }
 
-    // Refresh QR gallery
     async function refreshQrList() {
         try {
             const result = await apiCall('/api/qrcodes/list');
             if (result.success) {
                 const gallery = document.getElementById('qrGallery');
                 if (result.files.length === 0) {
-                    gallery.innerHTML = `
-                        <div class="empty-state" style="grid-column: 1 / -1;">
-                            <i data-lucide="image"></i>
-                            <h3>No QR Codes Generated</h3>
-                            <p>Generate QR codes above to see them here.</p>
-                        </div>
-                    `;
+                    gallery.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><i data-lucide="image"></i><h3>No QR Codes</h3><p>Generate QR codes above.</p></div>`;
                 } else {
                     gallery.innerHTML = result.files.map(file => `
                         <div class="qr-card">
@@ -349,28 +288,22 @@
                 lucide.createIcons();
             }
         } catch(e) {
-            console.error('Error refreshing QR list:', e);
+            console.error('Error:', e);
+        }
+    }
+
+    async function clearAllQrCodes() {
+        if (!confirm('Delete ALL QR codes?')) return;
+        try {
+            const response = await fetch('/api/qrcodes/clear', { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) { showToast(result.message, 'success'); refreshQrList(); }
+            else { showToast(result.message || 'Failed.', 'error'); }
+        } catch(e) {
+            showToast('Error.', 'error');
         }
     }
 
     lucide.createIcons();
-
-    // Clear all QR codes
-    async function clearAllQrCodes() {
-        if (!confirm('Are you sure you want to delete ALL generated QR codes? This cannot be undone.')) return;
-
-        try {
-            const response = await fetch('/api/qrcodes/clear', { method: 'DELETE' });
-            const result = await response.json();
-            if (result.success) {
-                showToast(result.message, 'success');
-                refreshQrList();
-            } else {
-                showToast(result.message || 'Failed to clear QR codes.', 'error');
-            }
-        } catch(e) {
-            showToast('Error clearing QR codes.', 'error');
-        }
-    }
 </script>
 {% endblock %}

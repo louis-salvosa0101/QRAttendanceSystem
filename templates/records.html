@@ -1,16 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Records - QR Attendance System{% endblock %}
-{% block page_title %}Attendance Records{% endblock %}
+{% block page_title %}Records{% endblock %}
 
 {% block content %}
+<style>
+.records-legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; }
+.records-legend-item { display:flex; align-items:center; gap:4px; font-weight:500; color:var(--text-secondary); }
+.records-legend-swatch { width:10px; height:10px; border-radius:2px; }
+.records-legend-success .records-legend-swatch { background:var(--accent-success); }
+.records-legend-info .records-legend-swatch { background:var(--accent-info); }
+.records-legend-warning .records-legend-swatch { background:var(--accent-warning); }
+.records-legend-danger .records-legend-swatch { background:var(--accent-danger); }
+.records-row-success { background:rgba(16,185,129,0.04) !important; }
+.records-row-success td:first-child { border-left:3px solid var(--accent-success); }
+.records-row-info { background:rgba(59,130,246,0.04) !important; }
+.records-row-info td:first-child { border-left:3px solid var(--accent-info); }
+.records-row-warning { background:rgba(245,158,11,0.06) !important; }
+.records-row-warning td:first-child { border-left:3px solid var(--accent-warning); }
+.records-row-danger { background:rgba(239,68,68,0.06) !important; }
+.records-row-danger td:first-child { border-left:3px solid var(--accent-danger); }
+.records-row-success-fine { background:rgba(245,158,11,0.04) !important; }
+.records-row-success-fine td:first-child { border-left:3px solid var(--accent-warning); }
+.records-badge { padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+.records-badge-success { background:rgba(16,185,129,0.12); color:var(--accent-success); }
+.records-badge-info { background:rgba(59,130,246,0.12); color:var(--accent-info); }
+.records-badge-warning { background:rgba(245,158,11,0.12); color:var(--accent-warning); }
+.records-badge-danger { background:rgba(239,68,68,0.12); color:var(--accent-danger); }
+.records-fine-cell { font-weight:500; color:var(--text-muted); }
+.records-fine-cell.records-fine-amount { color:var(--accent-danger); font-weight:700; }
+</style>
+
 <!-- Filters -->
 <div class="card mb-3">
     <div class="card-header">
         <div class="card-title">
             <i data-lucide="filter"></i>
-            Search & Filter
+            Filter
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="action-bar">
             <button class="btn btn-sm btn-primary" onclick="generateSummary()" id="btn-generate-summary">
                 <i data-lucide="bar-chart-3"></i>
                 Summary
@@ -29,19 +56,19 @@
         <form method="GET" action="/records" id="filterForm">
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Session ID</label>
+                    <label class="form-label">Session</label>
                     <select class="form-select" name="session_id" id="filterSessionId">
                         <option value="">All Sessions</option>
                         {% for session in all_sessions %}
                         <option value="{{ session.session_id }}"
                                 {% if filters.session_id == session.session_id %}selected{% endif %}>
-                            {{ session.session_id }} --- {{ session.subject or 'N/A' }}
+                            {{ session.session_id }} — {{ session.subject or 'N/A' }}
                         </option>
                         {% endfor %}
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Student Number</label>
+                    <label class="form-label">Student #</label>
                     <input type="text" class="form-input" name="student_number" id="filterStudentNumber"
                            placeholder="e.g., 2024-00001" value="{{ filters.student_number }}">
                 </div>
@@ -56,10 +83,10 @@
                            value="{{ filters.date_to }}">
                 </div>
             </div>
-            <div style="display:flex;gap:8px;">
+            <div style="display:flex;gap:6px;">
                 <button type="submit" class="btn btn-primary btn-sm" id="btn-apply-filter">
                     <i data-lucide="search"></i>
-                    Apply Filter
+                    Apply
                 </button>
                 <a href="/records" class="btn btn-outline btn-sm" id="btn-clear-filter">
                     <i data-lucide="x"></i>
@@ -70,99 +97,77 @@
     </div>
 </div>
 
-<!-- Fine Legend -->
-<div class="records-legend">
-    <div class="records-legend-item records-legend-success">
-        <span class="records-legend-swatch"></span>
-        <span>Time In (on time)</span>
-    </div>
-    <div class="records-legend-item records-legend-info">
-        <span class="records-legend-swatch"></span>
-        <span>Time Out</span>
-    </div>
-    <div class="records-legend-item records-legend-warning">
-        <span class="records-legend-swatch"></span>
-        <span>Late / Partial (₱25 fine)</span>
-    </div>
-    <div class="records-legend-item records-legend-danger">
-        <span class="records-legend-swatch"></span>
-        <span>Absent (₱50 fine)</span>
-    </div>
-</div>
-
-<style>
-.records-legend { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; padding:12px 16px; background:var(--bg-card); border-radius:var(--radius-sm); border:1px solid var(--border); }
-.records-legend-item { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:var(--text-secondary); }
-.records-legend-swatch { width:16px; height:16px; border-radius:4px; }
-.records-legend-success .records-legend-swatch { background:var(--accent-success); }
-.records-legend-info .records-legend-swatch { background:var(--accent-info); }
-.records-legend-warning .records-legend-swatch { background:var(--accent-warning); }
-.records-legend-danger .records-legend-swatch { background:var(--accent-danger); }
-.records-row-success { background:rgba(16,185,129,0.06) !important; }
-.records-row-success td:first-child { border-left:3px solid var(--accent-success); }
-.records-row-info { background:rgba(59,130,246,0.06) !important; }
-.records-row-info td:first-child { border-left:3px solid var(--accent-info); }
-.records-row-warning { background:rgba(245,158,11,0.08) !important; }
-.records-row-warning td:first-child { border-left:3px solid var(--accent-warning); }
-.records-row-danger { background:rgba(239,68,68,0.08) !important; }
-.records-row-danger td:first-child { border-left:3px solid var(--accent-danger); }
-.records-row-success-fine { background:rgba(245,158,11,0.06) !important; }
-.records-row-success-fine td:first-child { border-left:3px solid var(--accent-warning); }
-.records-badge { padding:5px 10px; border-radius:6px; font-size:12px; font-weight:600; }
-.records-badge-success { background:rgba(16,185,129,0.15); color:var(--accent-success); }
-.records-badge-info { background:rgba(59,130,246,0.15); color:var(--accent-info); }
-.records-badge-warning { background:rgba(245,158,11,0.15); color:var(--accent-warning); }
-.records-badge-danger { background:rgba(239,68,68,0.15); color:var(--accent-danger); }
-.records-fine-cell { font-weight:500; color:var(--text-muted); }
-.records-fine-cell.records-fine-amount { color:var(--accent-danger); font-weight:700; }
-</style>
-
-<!-- Records Table -->
+<!-- Records -->
 <div class="card">
     <div class="card-header">
         <div class="card-title">
             <i data-lucide="table"></i>
             Attendance Records
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             <span class="badge badge-info">{{ records|length }} records</span>
             {% set total_fines = namespace(val=0) %}
             {% for r in records %}{% if r.fine %}{% set total_fines.val = total_fines.val + r.fine %}{% endif %}{% endfor %}
             {% if total_fines.val > 0 %}
-            <span class="badge badge-danger">Total Fines: ₱{{ total_fines.val }}</span>
+            <span class="badge badge-danger">₱{{ total_fines.val }} fines</span>
             {% endif %}
         </div>
     </div>
     <div class="card-body">
+        {% set session_map = {} %}
+        {% for s in all_sessions %}
+            {% set _ = session_map.update({s.session_id: s}) %}
+        {% endfor %}
+
         {% if records %}
             {% for session_id, session_records in records|groupby('session_id') %}
-            <div class="mb-3" style="border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden;">
-                <div style="background: var(--bg-input); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                    <div style="font-family: 'Fira Code', monospace; font-weight: 600; color: var(--color-primary); font-size: 15px;">
-                        <i data-lucide="calendar-clock" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;"></i>
-                        Session: {{ session_id }}
+            {% set sess = session_map.get(session_id, {}) %}
+            {% set s_fine_late = sess.get('fine_late', 25) or 25 %}
+            {% set s_fine_absent = sess.get('fine_absent', 50) or 50 %}
+            {% set s_fine_partial = sess.get('fine_partial', 25) or 25 %}
+            <div class="mb-3" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+                <div style="background:var(--bg-input);padding:10px 14px;border-bottom:1px solid var(--border);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
+                        <div style="font-weight:600;color:var(--text-primary);font-size:13px;display:flex;align-items:center;gap:6px;">
+                            <i data-lucide="calendar-clock" style="width:14px;height:14px;color:var(--accent-primary);"></i>
+                            {{ session_id }}
+                            {% if sess.get('subject') %}
+                            <span style="font-weight:400;color:var(--text-muted);font-size:12px;">— {{ sess.subject }}</span>
+                            {% endif %}
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <span class="badge badge-info">{{ session_records|list|length }}</span>
+                            <button onclick="deleteSessionRecords('{{ session_id }}')" class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:none;border:1px solid var(--accent-danger);color:var(--accent-danger);cursor:pointer;" title="Delete session records">
+                                <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <span class="badge badge-info">{{ session_records|list|length }} Records</span>
-                        <button onclick="deleteSessionRecords('{{ session_id }}')" class="btn btn-sm" style="padding:4px 10px;font-size:12px;background:none;border:1px solid var(--accent-danger);color:var(--accent-danger);cursor:pointer;border-radius:var(--radius-sm);" title="Delete records for this session">
-                            <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
-                        </button>
+                    {% set session_fines_total = namespace(val=0) %}
+                    {% for r in session_records %}{% if r.fine %}{% set session_fines_total.val = session_fines_total.val + r.fine %}{% endif %}{% endfor %}
+                    <div class="records-legend">
+                        <div class="records-legend-item records-legend-success"><span class="records-legend-swatch"></span>In</div>
+                        <div class="records-legend-item records-legend-info"><span class="records-legend-swatch"></span>Out</div>
+                        <div class="records-legend-item records-legend-warning"><span class="records-legend-swatch"></span>Late ₱{{ s_fine_late }} / Partial ₱{{ s_fine_partial }}</div>
+                        <div class="records-legend-item records-legend-danger"><span class="records-legend-swatch"></span>Absent ₱{{ s_fine_absent }}</div>
+                        {% if session_fines_total.val > 0 %}
+                        <div class="records-legend-item" style="margin-left:auto;font-weight:700;color:var(--accent-danger);">Total: ₱{{ session_fines_total.val }}</div>
+                        {% endif %}
                     </div>
                 </div>
-                <div class="table-container" style="border-radius: 0;">
+                <div class="table-container" style="border-radius:0;">
                     <table>
                         <thead>
                             <tr>
                                 <th>#</th>
                                 <th>Date & Time</th>
-                                <th>Student Name</th>
-                                <th>Student Number</th>
+                                <th>Name</th>
+                                <th>Student #</th>
                                 <th>Course</th>
-                                <th>Year</th>
-                                <th>Section</th>
+                                <th>Yr</th>
+                                <th>Sec</th>
                                 <th>Status</th>
-                                <th>Fine (PHP)</th>
-                                <th>Fine Reason</th>
+                                <th>Fine</th>
+                                <th>Reason</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -173,24 +178,22 @@
                                 {% elif record.status == 'Time In' and record.fine %}records-row-success-fine
                                 {% elif record.status == 'Time In' %}records-row-success
                                 {% endif %}">
-                                <td style="color:var(--text-muted);">{{ loop.index }}</td>
-                                <td style="font-family:'Fira Code', monospace;font-size:13px;">
-                                    {{ record.datetime }}
-                                </td>
+                                <td style="color:var(--text-muted);font-size:12px;">{{ loop.index }}</td>
+                                <td style="font-family:'Inter',monospace;font-size:12px;white-space:nowrap;">{{ record.datetime }}</td>
                                 <td style="font-weight:600;color:var(--text-primary);">{{ record.name }}</td>
-                                <td style="font-family:'Fira Code', monospace;">{{ record.student_number }}</td>
+                                <td style="font-family:'Inter',monospace;font-size:12px;">{{ record.student_number }}</td>
                                 <td>{{ record.course }}</td>
                                 <td>{{ record.year }}</td>
                                 <td>{{ record.section }}</td>
                                 <td>
                                     {% if record.status == 'Absent' %}
-                                        <span class="records-badge records-badge-danger">{{ record.status }}</span>
+                                        <span class="records-badge records-badge-danger">Absent</span>
                                     {% elif record.status == 'Partial (No Time Out)' %}
                                         <span class="records-badge records-badge-warning">Partial</span>
                                     {% elif record.status == 'Time Out' %}
-                                        <span class="records-badge records-badge-info">{{ record.status }}</span>
+                                        <span class="records-badge records-badge-info">Out</span>
                                     {% elif record.status == 'Time In' %}
-                                        <span class="records-badge records-badge-success">{{ record.status }}</span>
+                                        <span class="records-badge records-badge-success">In</span>
                                     {% else %}
                                         <span class="records-badge records-badge-info">{{ record.status }}</span>
                                     {% endif %}
@@ -198,7 +201,7 @@
                                 <td class="records-fine-cell {% if record.fine and record.fine > 0 %}records-fine-amount{% endif %}">
                                     {% if record.fine and record.fine > 0 %}₱{{ record.fine }}{% else %}—{% endif %}
                                 </td>
-                                <td style="font-size:12px;color:var(--text-muted);">{{ record.fine_reason or '—' }}</td>
+                                <td style="font-size:11px;color:var(--text-muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ record.fine_reason or '' }}">{{ record.fine_reason or '—' }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -212,9 +215,9 @@
                 <h3>No Records Found</h3>
                 <p>
                     {% if filters.session_id or filters.student_number or filters.date_from or filters.date_to %}
-                        No records match your current filters. Try adjusting or clearing filters.
+                        No records match your filters. Try adjusting or clearing.
                     {% else %}
-                        Attendance records will appear here after scanning QR codes.
+                        Records will appear here after scanning QR codes.
                     {% endif %}
                 </p>
             </div>
@@ -229,7 +232,7 @@
         try {
             const result = await apiCall('/api/records/summary', 'POST');
             if (result.success) {
-                showToast('Summary sheet generated successfully! Download the Excel file to view.', 'success');
+                showToast('Summary generated! Download the Excel file to view.', 'success');
             } else {
                 showToast(result.message || 'Failed to generate summary.', 'error');
             }
@@ -239,7 +242,7 @@
     }
 
     async function resetRecords() {
-        if (!confirm('Are you sure you want to delete ALL attendance records? This will delete the Excel log file.')) return;
+        if (!confirm('Delete ALL attendance records? This cannot be undone.')) return;
 
         try {
             const response = await fetch('/api/records/reset', { method: 'DELETE' });
@@ -248,7 +251,7 @@
                 showToast(result.message, 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast(result.message || 'Failed to reset records.', 'error');
+                showToast(result.message || 'Failed to reset.', 'error');
             }
         } catch(e) {
             showToast('Error resetting records.', 'error');
@@ -256,7 +259,7 @@
     }
 
     async function deleteSessionRecords(sessionId) {
-        if (!confirm(`Delete all attendance records for session "${sessionId}"? This cannot be undone.`)) return;
+        if (!confirm(`Delete all records for session "${sessionId}"?`)) return;
 
         try {
             const response = await fetch(`/api/records/session/${sessionId}`, { method: 'DELETE' });
@@ -265,7 +268,7 @@
                 showToast(result.message, 'success');
                 setTimeout(() => location.reload(), 800);
             } else {
-                showToast(result.message || 'Failed to delete session records.', 'error');
+                showToast(result.message || 'Failed to delete.', 'error');
             }
         } catch(e) {
             showToast('Error deleting session records.', 'error');

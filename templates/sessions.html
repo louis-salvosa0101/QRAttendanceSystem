@@ -1,34 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Sessions - QR Attendance System{% endblock %}
-{% block page_title %}Session Management{% endblock %}
+{% block page_title %}Sessions{% endblock %}
 
 {% block content %}
 <style>
-.year-option { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; font-size:13px; transition:var(--transition-fast); user-select:none; }
+.year-option { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; font-size:13px; transition:var(--transition-fast); user-select:none; }
 .year-option:hover { border-color:var(--border-hover); background:var(--bg-card-hover); }
 .year-option input { cursor:pointer; accent-color:var(--accent-primary); }
+.collapsible-header { display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:12px 16px; background:var(--bg-input); border-bottom:1px solid var(--border); -webkit-tap-highlight-color:transparent; user-select:none; }
+.collapsible-header:hover { background:var(--bg-card-hover); }
+.collapsible-body { padding:16px; }
+.collapsible-body.collapsed { display:none; }
+.collapsible-chevron { transition:transform 0.2s; }
+.collapsible-chevron.open { transform:rotate(180deg); }
 </style>
+
 <!-- Create Session -->
 <div class="card mb-3">
-    <div class="card-header">
+    <div class="collapsible-header" onclick="toggleCollapsible('createForm', this)">
         <div class="card-title">
             <i data-lucide="plus-circle"></i>
             Create New Session
         </div>
+        <i data-lucide="chevron-down" class="collapsible-chevron open" style="width:18px;height:18px;color:var(--text-muted);"></i>
     </div>
-    <div class="card-body">
+    <div class="collapsible-body" id="createForm">
         <form id="createSessionForm" onsubmit="createSession(event)">
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label">Subject / Event Name</label>
-                    <input type="text" class="form-input" id="sessionSubject"
-                           placeholder="e.g., Data Structures" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Teacher / Organizer</label>
-                    <input type="text" class="form-input" id="sessionTeacher"
-                           placeholder="e.g., Prof. Santos">
-                </div>
+            <div class="form-group">
+                <label class="form-label">Subject / Event Name</label>
+                <input type="text" class="form-input" id="sessionSubject"
+                       placeholder="e.g., Data Structures" required>
             </div>
             <div class="form-row">
                 <div class="form-group">
@@ -44,73 +45,69 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                    <label class="form-label" style="display:flex;align-items:center;gap:4px;">
                         <i data-lucide="calendar-clock" style="width:14px;height:14px;color:var(--accent-primary);"></i>
-                        Scheduled Start Date & Time
+                        Scheduled Start
                     </label>
                     <input type="datetime-local" class="form-input" id="sessionScheduledStart">
-                    <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">
-                        Late countdown begins at this time. Leave blank to start immediately on creation.
+                    <span style="font-size:10px;color:var(--text-muted);margin-top:4px;display:block;">
+                        Leave blank to start immediately.
                     </span>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Late Threshold (minutes)</label>
+                    <label class="form-label">Late Threshold (min)</label>
                     <input type="number" class="form-input" id="sessionLateThreshold"
                            value="15" min="1" step="1">
-                    <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">
-                        Minutes after scheduled start before a student is marked late.
-                    </span>
                 </div>
             </div>
 
             <!-- Fine Settings -->
-            <div style="border:1px solid var(--border);border-radius:var(--radius-md);margin:8px 0 20px;overflow:hidden;">
-                <div style="padding:12px 16px;background:var(--bg-input);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <i data-lucide="banknote" style="width:16px;height:16px;color:var(--accent-danger);flex-shrink:0;"></i>
-                    <span style="font-size:13px;font-weight:600;color:var(--text-primary);">Fine Settings (per session)</span>
-                    <span style="font-size:11px;color:var(--text-muted);">— customizable per session; defaults shown</span>
+            <div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin:8px 0 16px;overflow:hidden;">
+                <div class="collapsible-header" onclick="toggleCollapsible('fineSettings', this)" style="padding:10px 14px;">
+                    <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text-primary);">
+                        <i data-lucide="banknote" style="width:14px;height:14px;color:var(--accent-danger);"></i>
+                        Fine Settings
+                    </div>
+                    <i data-lucide="chevron-down" class="collapsible-chevron" style="width:16px;height:16px;color:var(--text-muted);"></i>
                 </div>
-                <div style="padding:16px;">
+                <div class="collapsible-body collapsed" id="fineSettings">
                     <div class="form-row">
                         <div class="form-group">
-                            <label class="form-label" style="display:flex;align-items:center;gap:6px;">
-                                <i data-lucide="clock" style="width:13px;height:13px;color:var(--accent-warning);"></i>
+                            <label class="form-label" style="display:flex;align-items:center;gap:4px;">
+                                <i data-lucide="clock" style="width:12px;height:12px;color:var(--accent-warning);"></i>
                                 Late Fine (₱)
                             </label>
-                            <input type="number" class="form-input" id="sessionFineLate"
-                                   value="25" min="0" step="1">
-                            <span style="font-size:11px;color:var(--text-muted);margin-top:2px;display:block;">Scanned after threshold</span>
+                            <input type="number" class="form-input" id="sessionFineLate" value="25" min="0" step="1">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" style="display:flex;align-items:center;gap:6px;">
-                                <i data-lucide="alert-triangle" style="width:13px;height:13px;color:var(--accent-warning);"></i>
-                                Partial Scan Fine (₱)
+                            <label class="form-label" style="display:flex;align-items:center;gap:4px;">
+                                <i data-lucide="alert-triangle" style="width:12px;height:12px;color:var(--accent-warning);"></i>
+                                Partial Fine (₱)
                             </label>
-                            <input type="number" class="form-input" id="sessionFinePartial"
-                                   value="25" min="0" step="1">
-                            <span style="font-size:11px;color:var(--text-muted);margin-top:2px;display:block;">Only Time In, no Time Out</span>
+                            <input type="number" class="form-input" id="sessionFinePartial" value="25" min="0" step="1">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" style="display:flex;align-items:center;gap:6px;">
-                                <i data-lucide="user-x" style="width:13px;height:13px;color:var(--accent-danger);"></i>
+                            <label class="form-label" style="display:flex;align-items:center;gap:4px;">
+                                <i data-lucide="user-x" style="width:12px;height:12px;color:var(--accent-danger);"></i>
                                 Absent Fine (₱)
                             </label>
-                            <input type="number" class="form-input" id="sessionFineAbsent"
-                                   value="50" min="0" step="1">
-                            <span style="font-size:11px;color:var(--text-muted);margin-top:2px;display:block;">Did not scan at all</span>
+                            <input type="number" class="form-input" id="sessionFineAbsent" value="50" min="0" step="1">
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Required Attendees Filter -->
-            <div style="border:1px solid var(--border);border-radius:var(--radius-md);margin:8px 0 20px;overflow:hidden;">
-                <div style="padding:12px 16px;background:var(--bg-input);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <i data-lucide="users" style="width:16px;height:16px;color:var(--accent-warning);flex-shrink:0;"></i>
-                    <span style="font-size:13px;font-weight:600;color:var(--text-primary);">Required Attendees Filter</span>
-                    <span style="font-size:11px;color:var(--text-muted);">(leave blank = all students; absent students will be fined)</span>
+            <div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin:8px 0 16px;overflow:hidden;">
+                <div class="collapsible-header" onclick="toggleCollapsible('attendeeFilter', this)" style="padding:10px 14px;">
+                    <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text-primary);">
+                        <i data-lucide="users" style="width:14px;height:14px;color:var(--accent-warning);"></i>
+                        Required Attendees
+                        <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(optional)</span>
+                    </div>
+                    <i data-lucide="chevron-down" class="collapsible-chevron" style="width:16px;height:16px;color:var(--text-muted);"></i>
                 </div>
-                <div style="padding:16px;">
+                <div class="collapsible-body collapsed" id="attendeeFilter">
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">Course / Program</label>
@@ -126,14 +123,14 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label">Year Level</label>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:8px;">
+                            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:6px;">
                                 <label class="year-option"><input type="checkbox" name="sessionYear" value="1"> 1st Year</label>
                                 <label class="year-option"><input type="checkbox" name="sessionYear" value="2"> 2nd Year</label>
                                 <label class="year-option"><input type="checkbox" name="sessionYear" value="3"> 3rd Year</label>
                                 <label class="year-option"><input type="checkbox" name="sessionYear" value="4"> 4th Year</label>
                             </div>
-                            <div style="display:flex;gap:8px;">
-                                <button type="button" class="btn btn-sm btn-outline" onclick="selectAllYears()">All Years</button>
+                            <div style="display:flex;gap:6px;">
+                                <button type="button" class="btn btn-sm btn-outline" onclick="selectAllYears()">All</button>
                                 <button type="button" class="btn btn-sm btn-outline" onclick="clearYears()">Clear</button>
                             </div>
                         </div>
@@ -169,7 +166,7 @@
             <div class="session-card" id="session-{{ session.session_id }}">
                 <div class="session-header">
                     <div class="session-id">{{ session.session_id }}</div>
-                    <div style="display:flex;gap:8px;">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
                         <span class="badge badge-success">Active</span>
                         <button class="btn btn-sm btn-danger"
                                 onclick="endSession('{{ session.session_id }}', {{ session.fine_absent or 50 }}, {{ session.fine_partial or 25 }})"
@@ -188,12 +185,12 @@
                         <div class="session-meta-value">{{ session.teacher or '—' }}</div>
                     </div>
                     <div class="session-meta-item">
-                        <div class="session-meta-label">Scheduled Start</div>
+                        <div class="session-meta-label">Scheduled</div>
                         <div class="session-meta-value">
                             {% if session.scheduled_start %}
                                 {{ session.scheduled_start[:16] }}
                             {% else %}
-                                <span style="color:var(--text-muted);font-size:12px;">Immediate (on creation)</span>
+                                <span style="color:var(--text-muted);font-size:11px;">Immediate</span>
                             {% endif %}
                         </div>
                     </div>
@@ -203,13 +200,13 @@
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Attendance</div>
-                        <div class="session-meta-value" style="color:var(--accent-success);font-size:18px;font-weight:700;">
+                        <div class="session-meta-value" style="color:var(--accent-success);font-size:16px;font-weight:700;">
                             {{ session.attendance_count }}
                         </div>
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Required</div>
-                        <div class="session-meta-value" style="font-size:12px;">
+                        <div class="session-meta-value" style="font-size:11px;">
                             {% if session.required_course %}{{ session.required_course }}{% endif %}
                             {% if session.required_year %} · Yr {{ session.required_year|join(', ') }}{% endif %}
                             {% if session.required_section %} · Sec {{ session.required_section }}{% endif %}
@@ -218,21 +215,21 @@
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Fines</div>
-                        <div class="session-meta-value" style="font-size:12px;">
-                            Late: ₱{{ session.fine_late or 25 }} (after {{ session.late_threshold_minutes or 15 }}min)
-                            · Partial: ₱{{ session.fine_partial or 25 }}
-                            · Absent: ₱{{ session.fine_absent or 50 }}
+                        <div class="session-meta-value" style="font-size:11px;">
+                            L₱{{ session.fine_late or 25 }} · P₱{{ session.fine_partial or 25 }} · A₱{{ session.fine_absent or 50 }}
                         </div>
                     </div>
+                    {% if session.notes %}
                     <div class="session-meta-item">
                         <div class="session-meta-label">Notes</div>
-                        <div class="session-meta-value">{{ session.notes or '—' }}</div>
+                        <div class="session-meta-value">{{ session.notes }}</div>
                     </div>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
         {% else %}
-            <div class="empty-state">
+            <div class="empty-state" style="padding:32px 16px;">
                 <i data-lucide="calendar-x"></i>
                 <h3>No Active Sessions</h3>
                 <p>Create a new session above to start tracking attendance.</p>
@@ -241,35 +238,35 @@
     </div>
 </div>
 
-<!-- All Sessions History -->
+<!-- Session History -->
 <div class="card">
     <div class="card-header">
         <div class="card-title">
             <i data-lucide="history"></i>
-            Session History
+            History
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
+        <div class="action-bar">
             <span class="badge badge-info"><span id="sessionCount">{{ all_sessions|length }}</span> total</span>
             <button class="btn btn-sm btn-danger" onclick="clearSessionHistory()" id="btn-clear-sessions">
                 <i data-lucide="trash-2"></i>
-                Clear History
+                Clear
             </button>
         </div>
     </div>
-    <div class="card-body" style="border-bottom:1px solid var(--border);padding-top:12px;padding-bottom:12px;">
+    <div class="card-body" style="border-bottom:1px solid var(--border);padding-top:10px;padding-bottom:10px;">
         <div class="form-row" style="align-items:end;">
             <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label" style="display:flex;align-items:center;gap:4px;">
-                    <i data-lucide="search" style="width:14px;height:14px;"></i>Search
+                    <i data-lucide="search" style="width:12px;height:12px;"></i>Search
                 </label>
-                <input type="text" class="form-input" id="filterSearch" placeholder="Search by ID, Subject, Teacher..." oninput="filterSessions()">
+                <input type="text" class="form-input" id="filterSearch" placeholder="Search..." oninput="filterSessions()">
             </div>
             <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label" style="display:flex;align-items:center;gap:4px;">
-                    <i data-lucide="filter" style="width:14px;height:14px;"></i>Status
+                    <i data-lucide="filter" style="width:12px;height:12px;"></i>Status
                 </label>
                 <select class="form-select" id="filterStatus" onchange="filterSessions()">
-                    <option value="">All Statuses</option>
+                    <option value="">All</option>
                     <option value="active">Active</option>
                     <option value="closed">Closed</option>
                 </select>
@@ -286,31 +283,31 @@
                         <th>Subject</th>
                         <th>Teacher</th>
                         <th>Required</th>
-                        <th>Scheduled Start</th>
-                        <th>Fines (L / P / A)</th>
-                        <th>Attendance</th>
+                        <th>Start</th>
+                        <th>Fines (L/P/A)</th>
+                        <th>Count</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for session in all_sessions|reverse %}
                     <tr data-status="{{ 'active' if session.is_active else 'closed' }}">
-                        <td style="font-family:'Fira Code',monospace;font-weight:600;color:var(--accent-primary);">
+                        <td style="font-family:'Inter',monospace;font-weight:600;color:var(--accent-primary);font-size:12px;">
                             {{ session.session_id }}
                         </td>
                         <td>{{ session.subject or '—' }}</td>
                         <td>{{ session.teacher or '—' }}</td>
-                        <td style="font-size:12px;color:var(--text-muted);">
+                        <td style="font-size:11px;color:var(--text-muted);">
                             {% if session.required_course %}{{ session.required_course }}{% endif %}
-                            {% if session.required_year %} · Yr {{ session.required_year|join(', ') }}{% endif %}
-                            {% if session.required_section %} · Sec {{ session.required_section }}{% endif %}
+                            {% if session.required_year %} Yr{{ session.required_year|join(',') }}{% endif %}
+                            {% if session.required_section %} S{{ session.required_section }}{% endif %}
                             {% if not session.required_course and not session.required_year and not session.required_section %}All{% endif %}
                         </td>
-                        <td style="font-size:12px;">
+                        <td style="font-size:11px;">
                             {% if session.scheduled_start %}{{ session.scheduled_start[:16] }}{% else %}—{% endif %}
                         </td>
-                        <td style="font-size:12px;white-space:nowrap;">
-                            ₱{{ session.fine_late or 25 }} / ₱{{ session.fine_partial or 25 }} / ₱{{ session.fine_absent or 50 }}
+                        <td style="font-size:11px;white-space:nowrap;">
+                            ₱{{ session.fine_late or 25 }}/₱{{ session.fine_partial or 25 }}/₱{{ session.fine_absent or 50 }}
                         </td>
                         <td>
                             <span style="font-weight:700;color:var(--accent-success);">{{ session.attendance_count }}</span>
@@ -328,7 +325,7 @@
             </table>
         </div>
         {% else %}
-            <div class="empty-state">
+            <div class="empty-state" style="padding:32px 16px;">
                 <i data-lucide="database"></i>
                 <h3>No Sessions Yet</h3>
                 <p>Session history will appear here.</p>
@@ -340,7 +337,13 @@
 
 {% block scripts %}
 <script>
-    // Handle custom course input
+    function toggleCollapsible(id, header) {
+        const body = document.getElementById(id);
+        const chevron = header.querySelector('.collapsible-chevron');
+        body.classList.toggle('collapsed');
+        chevron.classList.toggle('open');
+    }
+
     document.getElementById('sessionCourse').addEventListener('change', function() {
         const custom = document.getElementById('sessionCourseCustom');
         custom.style.display = this.value === '__custom__' ? 'block' : 'none';
@@ -362,7 +365,7 @@
     async function createSession(e) {
         e.preventDefault();
         const subject = document.getElementById('sessionSubject').value;
-        const teacher = document.getElementById('sessionTeacher').value;
+        const teacher = '';
         const notes = document.getElementById('sessionNotes').value;
         const duration_hours = document.getElementById('sessionDuration').value;
         const required_course = getCourseValue();
@@ -385,7 +388,7 @@
             });
 
             if (result.success) {
-                showToast(`Session ${result.session.session_id} created successfully.`, 'success');
+                showToast(`Session ${result.session.session_id} created!`, 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
                 showToast('Failed to create session.', 'error');
@@ -398,24 +401,22 @@
     async function endSession(sessionId, fineAbsent, finePartial) {
         fineAbsent = fineAbsent || 50;
         finePartial = finePartial || 25;
-        if (!confirm(`Close session ${sessionId}?\n\nThis will:\n- Mark all required students who didn't scan as ABSENT (₱${fineAbsent} fine)\n- Apply ₱${finePartial} fine to students who only scanned Time In\n\nProceed?`)) return;
+        if (!confirm(`Close session ${sessionId}?\n\nAbsent students: ₱${fineAbsent} fine\nPartial scans: ₱${finePartial} fine\n\nProceed?`)) return;
 
         try {
             const btn = document.getElementById(`btn-close-${sessionId}`);
-            if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader"></i> Closing...'; }
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Closing...'; }
 
             const result = await apiCall(`/api/session/${sessionId}/close`, 'POST');
             if (result.success) {
-                const fa = result.fine_absent || fineAbsent;
-                const fp = result.fine_partial || finePartial;
                 let msg = `Session ${sessionId} closed.`;
-                if (result.absent_logged > 0) msg += ` ${result.absent_logged} student(s) marked absent (₱${fa} fine each).`;
-                if (result.partial_updated > 0) msg += ` ${result.partial_updated} partial scan(s) fined ₱${fp}.`;
+                if (result.absent_logged > 0) msg += ` ${result.absent_logged} absent.`;
+                if (result.partial_updated > 0) msg += ` ${result.partial_updated} partial.`;
                 showToast(msg, 'success');
                 setTimeout(() => location.reload(), 1500);
             } else {
                 showToast(result.message, 'error');
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="x"></i> Close'; }
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="x"></i> Close'; lucide.createIcons(); }
             }
         } catch(e) {
             showToast('Error closing session.', 'error');
@@ -423,7 +424,7 @@
     }
 
     async function clearSessionHistory() {
-        if (!confirm('Are you sure you want to clear ALL session history? This will delete the session data file.')) return;
+        if (!confirm('Clear ALL session history?')) return;
 
         try {
             const response = await fetch('/api/session/clear-history', { method: 'DELETE' });
@@ -432,7 +433,7 @@
                 showToast(result.message, 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast(result.message || 'Failed to clear history.', 'error');
+                showToast(result.message || 'Failed to clear.', 'error');
             }
         } catch(e) {
             showToast('Error clearing session history.', 'error');
@@ -448,7 +449,6 @@
         rows.forEach(row => {
             const text = row.textContent.toLowerCase();
             const rowStatus = row.getAttribute('data-status');
-            
             const matchSearch = text.includes(searchVal);
             const matchStatus = statusVal === '' || rowStatus === statusVal;
 
@@ -459,7 +459,7 @@
                 row.style.display = 'none';
             }
         });
-        
+
         const countSpan = document.getElementById('sessionCount');
         if (countSpan) countSpan.textContent = count;
     }
