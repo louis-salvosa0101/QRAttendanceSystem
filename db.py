@@ -136,3 +136,27 @@ def init_db():
                 )
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_officers_username ON officers(username)")
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS manual_fines (
+                    id SERIAL PRIMARY KEY,
+                    student_number TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    created_by TEXT
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_manual_fines_student ON manual_fines(student_number)")
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS fine_payments (
+                    id SERIAL PRIMARY KEY,
+                    student_number TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    created_by TEXT
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_fine_payments_student ON fine_payments(student_number)")

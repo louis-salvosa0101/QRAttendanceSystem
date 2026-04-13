@@ -23,7 +23,8 @@ from db import get_db, _cur
 from excel_logger import (log_attendance, log_absent_students,
                            generate_summary_sheet,
                            get_attendance_records, get_session_stats,
-                           create_sample_master_list, clear_attendance_records)
+                           create_sample_master_list, clear_attendance_records,
+                           clear_session_records)
 from student_registry import (register_student, register_students_bulk,
                                get_all_students, get_student,
                                get_students_by_filter, delete_student,
@@ -245,6 +246,24 @@ def student_detail_page(student_number):
                 'reason': r.get('fine_reason', ''),
             })
 
+    # Fetch manual fines and payments
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "SELECT * FROM manual_fines WHERE student_number = %s ORDER BY created_at DESC",
+            (student_number,)
+        )
+        manual_fines = cur.fetchall()
+
+        cur.execute(
+            "SELECT * FROM fine_payments WHERE student_number = %s ORDER BY created_at DESC",
+            (student_number,)
+        )
+        payments = cur.fetchall()
+
+    manual_fines_total = sum(f['amount'] for f in manual_fines)
+    payments_total = sum(p['amount'] for p in payments)
+
     summary = {
         'total_sessions': len(sessions_set),
         'absent_count': absent_count,
@@ -252,14 +271,20 @@ def student_detail_page(student_number):
         'partial_count': partial_count,
         'time_in_count': time_in_count,
         'time_out_count': time_out_count,
-        'total_fines': total_fines,
+        'attendance_fines': total_fines,
+        'manual_fines': manual_fines_total,
+        'total_fines': total_fines + manual_fines_total,
+        'total_paid': payments_total,
+        'balance': (total_fines + manual_fines_total) - payments_total,
     }
 
     return render_template('student_detail.html',
                            student=student,
                            records=records,
                            summary=summary,
-                           fines_list=fines_list)
+                           fines_list=fines_list,
+                           manual_fines=manual_fines,
+                           payments=payments)
 
 
 # ─── API ENDPOINTS ──────────────────────────────────────────────────────
@@ -657,6 +682,106 @@ def api_clear_students():
     """Clear entire student registry."""
     count = clear_registry()
     return jsonify({'success': True, 'message': f'{count} students removed from registry.'})
+
+
+# ─── FINES & PAYMENTS API ───────────────────────────────────────────────
+
+@app.route('/api/students/<student_number>/fines', methods=['POST'])
+@login_required
+def api_add_manual_fine(student_number):
+    """Add a manual fine to a student."""
+    student = get_student(student_number)
+    if not student or not student.get('student_number'):
+        return jsonify({'success': False, 'message': 'Student not found.'}), 404
+
+    data = request.get_json() or {}
+    amount = data.get('amount')
+    reason = data.get('reason', '').strip()
+
+    if not amount or not isinstance(amount, (int, float)) or amount <= 0:
+        return jsonify({'success': False, 'message': 'A valid positive amount is required.'}), 400
+    if not reason:
+        return jsonify({'success': False, 'message': 'A reason is required.'}), 400
+
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "INSERT INTO manual_fines (student_number, amount, reason, created_at, created_by) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (student_number, int(amount), reason, now, current_user.name)
+        )
+
+    return jsonify({
+        'success': True,
+        'message': f'Fine of ₱{int(amount)} added to {student["name"]}.'
+    })
+
+
+@app.route('/api/students/<student_number>/fines/<int:fine_id>', methods=['DELETE'])
+@login_required
+def api_delete_manual_fine(student_number, fine_id):
+    """Delete a manual fine."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "DELETE FROM manual_fines WHERE id = %s AND student_number = %s",
+            (fine_id, student_number)
+        )
+        deleted = cur.rowcount
+
+    return jsonify({
+        'success': deleted > 0,
+        'message': 'Fine removed.' if deleted else 'Fine not found.'
+    })
+
+
+@app.route('/api/students/<student_number>/payments', methods=['POST'])
+@login_required
+def api_add_payment(student_number):
+    """Record a fine payment for a student."""
+    student = get_student(student_number)
+    if not student or not student.get('student_number'):
+        return jsonify({'success': False, 'message': 'Student not found.'}), 404
+
+    data = request.get_json() or {}
+    amount = data.get('amount')
+    notes = data.get('notes', '').strip()
+
+    if not amount or not isinstance(amount, (int, float)) or amount <= 0:
+        return jsonify({'success': False, 'message': 'A valid positive amount is required.'}), 400
+
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "INSERT INTO fine_payments (student_number, amount, notes, created_at, created_by) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (student_number, int(amount), notes or None, now, current_user.name)
+        )
+
+    return jsonify({
+        'success': True,
+        'message': f'Payment of ₱{int(amount)} recorded for {student["name"]}.'
+    })
+
+
+@app.route('/api/students/<student_number>/payments/<int:payment_id>', methods=['DELETE'])
+@login_required
+def api_delete_payment(student_number, payment_id):
+    """Delete a payment record."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "DELETE FROM fine_payments WHERE id = %s AND student_number = %s",
+            (payment_id, student_number)
+        )
+        deleted = cur.rowcount
+
+    return jsonify({
+        'success': deleted > 0,
+        'message': 'Payment removed.' if deleted else 'Payment not found.'
+    })
 
 
 # ─── QR GENERATION API ──────────────────────────────────────────────────

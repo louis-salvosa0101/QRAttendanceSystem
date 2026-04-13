@@ -328,3 +328,14 @@ def clear_attendance_records() -> int:
         count = cur.fetchone()['cnt']
         cur.execute("DELETE FROM attendance_records")
     return count
+
+
+def clear_session_records(session_id: str) -> int:
+    """Clear attendance records for a specific session. Returns count deleted."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT COUNT(*) AS cnt FROM attendance_records WHERE session_id = %s",
+                    (session_id,))
+        count = cur.fetchone()['cnt']
+        cur.execute("DELETE FROM attendance_records WHERE session_id = %s", (session_id,))
+    return count

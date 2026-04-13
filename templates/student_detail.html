@@ -35,12 +35,22 @@
                     </span>
                 </div>
             </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button onclick="openAddFineModal()" class="btn btn-sm btn-primary" style="cursor:pointer;" id="btn-add-fine">
+                    <i data-lucide="plus-circle"></i>
+                    Add Fine
+                </button>
+                <button onclick="openPaymentModal()" class="btn btn-sm btn-outline" style="cursor:pointer;border-color:var(--accent-success);color:var(--accent-success);" id="btn-add-payment">
+                    <i data-lucide="banknote"></i>
+                    Record Payment
+                </button>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Stats Row -->
-<div class="stats-grid mb-3" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+<div class="stats-grid mb-3" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
     <div class="stat-card purple">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
             <div>
@@ -72,11 +82,33 @@
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
             <div>
                 <div class="stat-value" style="color:{% if summary.total_fines > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">
-                    {{ summary.total_fines }}
+                    ₱{{ summary.total_fines }}
                 </div>
-                <div class="stat-label">Total Fines (PHP)</div>
+                <div class="stat-label">Total Fines</div>
             </div>
             <div class="stat-icon"><i data-lucide="philippine-peso"></i></div>
+        </div>
+    </div>
+    <div class="stat-card green">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value" style="color:var(--accent-success);">
+                    ₱{{ summary.total_paid }}
+                </div>
+                <div class="stat-label">Total Paid</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="wallet"></i></div>
+        </div>
+    </div>
+    <div class="stat-card {% if summary.balance > 0 %}amber{% else %}green{% endif %}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value" style="color:{% if summary.balance > 0 %}var(--accent-danger){% elif summary.balance == 0 %}var(--accent-success){% else %}var(--accent-info){% endif %};">
+                    ₱{{ summary.balance }}
+                </div>
+                <div class="stat-label">Balance</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="scale"></i></div>
         </div>
     </div>
 </div>
@@ -87,10 +119,10 @@
         <div class="card-header">
             <div class="card-title">
                 <i data-lucide="receipt"></i>
-                Fines Breakdown
+                Attendance Fines
             </div>
             {% if fines_list %}
-            <span class="badge badge-danger">{{ fines_list|length }} fine{{ 's' if fines_list|length != 1 }}</span>
+            <span class="badge badge-danger">{{ fines_list|length }} fine{{ 's' if fines_list|length != 1 }} &middot; ₱{{ summary.attendance_fines }}</span>
             {% endif %}
         </div>
         <div class="card-body">
@@ -128,8 +160,125 @@
             {% else %}
             <div class="empty-state" style="padding:30px;">
                 <i data-lucide="check-circle" style="width:40px;height:40px;color:var(--accent-success);opacity:0.6;"></i>
-                <h3 style="font-size:15px;margin-top:10px;">No Fines</h3>
-                <p style="font-size:13px;">This student has a clean record.</p>
+                <h3 style="font-size:15px;margin-top:10px;">No Attendance Fines</h3>
+                <p style="font-size:13px;">This student has no attendance-related fines.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Manual Fines -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="file-pen-line"></i>
+                Manual Fines
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                {% if manual_fines %}
+                <span class="badge badge-danger">{{ manual_fines|length }} fine{{ 's' if manual_fines|length != 1 }} &middot; ₱{{ summary.manual_fines }}</span>
+                {% endif %}
+                <button onclick="openAddFineModal()" class="btn btn-sm btn-primary" style="padding:4px 10px;font-size:12px;cursor:pointer;">
+                    <i data-lucide="plus" style="width:14px;height:14px;"></i>
+                    Add
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if manual_fines %}
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Reason</th>
+                            <th>Amount</th>
+                            <th>By</th>
+                            <th style="width:40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mf in manual_fines %}
+                        <tr>
+                            <td style="font-size:13px;font-family:'Fira Code',monospace;white-space:nowrap;">{{ mf.created_at[:16] }}</td>
+                            <td style="font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ mf.reason }}">{{ mf.reason }}</td>
+                            <td style="font-weight:700;color:var(--accent-danger);white-space:nowrap;">₱{{ mf.amount }}</td>
+                            <td style="font-size:12px;color:var(--text-muted);">{{ mf.created_by or '—' }}</td>
+                            <td>
+                                <button onclick="deleteManualFine({{ mf.id }})" class="btn btn-sm" style="padding:4px 6px;background:none;color:var(--text-muted);cursor:pointer;" title="Remove fine">
+                                    <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding:30px;">
+                <i data-lucide="check-circle" style="width:40px;height:40px;color:var(--accent-success);opacity:0.6;"></i>
+                <h3 style="font-size:15px;margin-top:10px;">No Manual Fines</h3>
+                <p style="font-size:13px;">No manually-added fines for this student.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Payments & Attendance Summary -->
+<div class="grid-2">
+    <!-- Payments -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <div class="card-title">
+                <i data-lucide="wallet"></i>
+                Payments
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                {% if payments %}
+                <span class="badge" style="background:rgba(16,185,129,0.15);color:var(--accent-success);">₱{{ summary.total_paid }} paid</span>
+                {% endif %}
+                <button onclick="openPaymentModal()" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;border-color:var(--accent-success);color:var(--accent-success);cursor:pointer;">
+                    <i data-lucide="plus" style="width:14px;height:14px;"></i>
+                    Pay
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if payments %}
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Notes</th>
+                            <th>By</th>
+                            <th style="width:40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in payments %}
+                        <tr>
+                            <td style="font-size:13px;font-family:'Fira Code',monospace;white-space:nowrap;">{{ p.created_at[:16] }}</td>
+                            <td style="font-weight:700;color:var(--accent-success);white-space:nowrap;">₱{{ p.amount }}</td>
+                            <td style="font-size:12px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ p.notes or '' }}">{{ p.notes or '—' }}</td>
+                            <td style="font-size:12px;color:var(--text-muted);">{{ p.created_by or '—' }}</td>
+                            <td>
+                                <button onclick="deletePayment({{ p.id }})" class="btn btn-sm" style="padding:4px 6px;background:none;color:var(--text-muted);cursor:pointer;" title="Remove payment">
+                                    <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding:30px;">
+                <i data-lucide="piggy-bank" style="width:40px;height:40px;color:var(--text-muted);opacity:0.5;"></i>
+                <h3 style="font-size:15px;margin-top:10px;">No Payments</h3>
+                <p style="font-size:13px;">No fine payments recorded yet.</p>
             </div>
             {% endif %}
         </div>
@@ -242,10 +391,213 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Add Fine Modal -->
+<div class="modal-overlay" id="addFineModal">
+    <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i data-lucide="plus-circle" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;color:var(--accent-danger);"></i>
+                Add Manual Fine
+            </h3>
+            <button class="modal-close" onclick="closeAddFineModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+                Adding fine to <strong>{{ student.name }}</strong> ({{ student.student_number }})
+            </p>
+            <form id="addFineForm" onsubmit="submitAddFine(event)">
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Amount (₱)</label>
+                    <input type="number" id="fineAmount" min="1" step="1" required class="form-input" placeholder="e.g. 50" style="width:100%;">
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Reason</label>
+                    <input type="text" id="fineReason" required class="form-input" placeholder="e.g. Missing uniform, late submission" style="width:100%;">
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="closeAddFineModal()">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="fineSubmitBtn" style="background:var(--accent-danger);border-color:var(--accent-danger);">
+                        <i data-lucide="plus-circle"></i>
+                        Add Fine
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="modal-overlay" id="paymentModal">
+    <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i data-lucide="banknote" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;color:var(--accent-success);"></i>
+                Record Payment
+            </h3>
+            <button class="modal-close" onclick="closePaymentModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">
+                Recording payment for <strong>{{ student.name }}</strong> ({{ student.student_number }})
+            </p>
+            <div style="display:flex;gap:12px;margin-bottom:16px;padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);font-size:13px;">
+                <span>Total fines: <strong style="color:var(--accent-danger);">₱{{ summary.total_fines }}</strong></span>
+                <span>|</span>
+                <span>Paid: <strong style="color:var(--accent-success);">₱{{ summary.total_paid }}</strong></span>
+                <span>|</span>
+                <span>Balance: <strong style="color:{% if summary.balance > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">₱{{ summary.balance }}</strong></span>
+            </div>
+            <form id="paymentForm" onsubmit="submitPayment(event)">
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Amount (₱)</label>
+                    <input type="number" id="paymentAmount" min="1" step="1" required class="form-input" placeholder="e.g. 100" style="width:100%;">
+                </div>
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Notes (optional)</label>
+                    <input type="text" id="paymentNotes" class="form-input" placeholder="e.g. Partial payment, paid in cash" style="width:100%;">
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="closePaymentModal()">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="paymentSubmitBtn" style="background:var(--accent-success);border-color:var(--accent-success);">
+                        <i data-lucide="check"></i>
+                        Record Payment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    const STUDENT_NUMBER = '{{ student.student_number }}';
+
+    function openAddFineModal() {
+        document.getElementById('addFineForm').reset();
+        document.getElementById('fineSubmitBtn').disabled = false;
+        document.getElementById('addFineModal').classList.add('active');
+        lucide.createIcons();
+        setTimeout(() => document.getElementById('fineAmount').focus(), 200);
+    }
+
+    function closeAddFineModal() {
+        document.getElementById('addFineModal').classList.remove('active');
+    }
+
+    function openPaymentModal() {
+        document.getElementById('paymentForm').reset();
+        document.getElementById('paymentSubmitBtn').disabled = false;
+        document.getElementById('paymentModal').classList.add('active');
+        lucide.createIcons();
+        setTimeout(() => document.getElementById('paymentAmount').focus(), 200);
+    }
+
+    function closePaymentModal() {
+        document.getElementById('paymentModal').classList.remove('active');
+    }
+
+    async function submitAddFine(e) {
+        e.preventDefault();
+        const btn = document.getElementById('fineSubmitBtn');
+        btn.disabled = true;
+
+        const amount = parseInt(document.getElementById('fineAmount').value);
+        const reason = document.getElementById('fineReason').value.trim();
+
+        if (!amount || amount <= 0) {
+            showToast('Please enter a valid amount.', 'error');
+            btn.disabled = false;
+            return;
+        }
+        if (!reason) {
+            showToast('Please enter a reason.', 'error');
+            btn.disabled = false;
+            return;
+        }
+
+        try {
+            const data = await apiCall(`/api/students/${STUDENT_NUMBER}/fines`, 'POST', { amount, reason });
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(data.message, 'error');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            showToast('Failed to add fine.', 'error');
+            btn.disabled = false;
+        }
+    }
+
+    async function submitPayment(e) {
+        e.preventDefault();
+        const btn = document.getElementById('paymentSubmitBtn');
+        btn.disabled = true;
+
+        const amount = parseInt(document.getElementById('paymentAmount').value);
+        const notes = document.getElementById('paymentNotes').value.trim();
+
+        if (!amount || amount <= 0) {
+            showToast('Please enter a valid amount.', 'error');
+            btn.disabled = false;
+            return;
+        }
+
+        try {
+            const data = await apiCall(`/api/students/${STUDENT_NUMBER}/payments`, 'POST', { amount, notes });
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(data.message, 'error');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            showToast('Failed to record payment.', 'error');
+            btn.disabled = false;
+        }
+    }
+
+    async function deleteManualFine(fineId) {
+        if (!confirm('Remove this fine?')) return;
+        try {
+            const data = await apiCall(`/api/students/${STUDENT_NUMBER}/fines/${fineId}`, 'DELETE');
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(data.message, 'error');
+            }
+        } catch (err) {
+            showToast('Failed to remove fine.', 'error');
+        }
+    }
+
+    async function deletePayment(paymentId) {
+        if (!confirm('Remove this payment record?')) return;
+        try {
+            const data = await apiCall(`/api/students/${STUDENT_NUMBER}/payments/${paymentId}`, 'DELETE');
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(data.message, 'error');
+            }
+        } catch (err) {
+            showToast('Failed to remove payment.', 'error');
+        }
+    }
+
+    document.getElementById('addFineModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeAddFineModal();
+    });
+    document.getElementById('paymentModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closePaymentModal();
+    });
+
     lucide.createIcons();
 </script>
 {% endblock %}
