@@ -93,9 +93,12 @@ def log_absent_students(session_id: str, session_data: dict,
     """
     After a session closes, log all registered students who did NOT scan as Absent.
     Update any student who only Time In (no Time Out) to Partial with FINE_PARTIAL.
+    Uses per-session fine amounts when available, falling back to global config.
     Returns dict with counts: absent_logged, partial_updated
     """
     scanned = session_data.get('scanned_students', {})
+    s_fine_absent = session_data.get('fine_absent') or FINE_ABSENT
+    s_fine_partial = session_data.get('fine_partial') or FINE_PARTIAL
     result = {'absent_logged': 0, 'partial_updated': 0}
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -112,19 +115,18 @@ def log_absent_students(session_id: str, session_data: dict,
                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'Absent', %s, %s)""",
                     (now, student.get('name', ''), student_number, student.get('course', ''),
                      student.get('year', ''), student.get('section', ''),
-                     session_id, FINE_ABSENT, 'Absent - did not scan QR')
+                     session_id, s_fine_absent, 'Absent - did not scan QR')
                 )
                 result['absent_logged'] += 1
 
             elif scan_info.get('status') == 'in':
-                fine = FINE_PARTIAL
                 fine_reason = 'No Time Out recorded (partial scan) - considered late'
 
                 cur.execute(
                     """UPDATE attendance_records
                        SET status = 'Partial (No Time Out)', fine = %s, fine_reason = %s
                        WHERE session_id = %s AND student_number = %s AND status = 'Time In'""",
-                    (fine, fine_reason, session_id, student_number)
+                    (s_fine_partial, fine_reason, session_id, student_number)
                 )
                 if cur.rowcount > 0:
                     result['partial_updated'] += 1
@@ -135,7 +137,7 @@ def log_absent_students(session_id: str, session_data: dict,
                            VALUES (%s, %s, %s, %s, %s, %s, %s, 'Partial (No Time Out)', %s, %s)""",
                         (now, student.get('name', ''), student_number, student.get('course', ''),
                          student.get('year', ''), student.get('section', ''),
-                         session_id, fine, fine_reason),
+                         session_id, s_fine_partial, fine_reason),
                     )
                     result['partial_updated'] += 1
 
@@ -181,6 +183,24 @@ def generate_summary_sheet(filepath: str = None) -> bool:
         elif r.get('status') in ('Late', 'Time In', 'Partial (No Time Out)') and fine:
             student_records[student_num]['late_count'] += 1
 
+    # Fetch manual fines and payments per student
+    manual_fines_map = {}
+    payments_map = {}
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT student_number, SUM(amount) AS total FROM manual_fines GROUP BY student_number")
+        for row in cur.fetchall():
+            manual_fines_map[row['student_number']] = row['total'] or 0
+        cur.execute("SELECT student_number, SUM(amount) AS total FROM fine_payments GROUP BY student_number")
+        for row in cur.fetchall():
+            payments_map[row['student_number']] = row['total'] or 0
+
+    for sn, data in student_records.items():
+        data['manual_fines'] = manual_fines_map.get(sn, 0)
+        data['total_paid'] = payments_map.get(sn, 0)
+        data['grand_fines'] = data['total_fines'] + data['manual_fines']
+        data['balance'] = max(0, data['grand_fines'] - data['total_paid'])
+
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     wb = Workbook()
     if 'Sheet' in wb.sheetnames:
@@ -189,9 +209,13 @@ def generate_summary_sheet(filepath: str = None) -> bool:
     summary_headers = [
         'Student Name', 'Student Number', 'Course', 'Year', 'Section',
         'Total Sessions', 'Sessions Attended', 'Absent Count',
-        'Late Count', 'Total Fines (PHP)', 'Sessions List'
+        'Late Count', 'Attendance Fines (PHP)', 'Manual Fines (PHP)',
+        'Total Fines (PHP)', 'Total Paid (PHP)', 'Balance (PHP)',
+        'Sessions List'
     ]
-    summary_widths = [30, 20, 15, 8, 10, 16, 18, 14, 12, 20, 50]
+    summary_widths = [30, 20, 15, 8, 10, 16, 18, 14, 12, 20, 18, 18, 18, 18, 50]
+
+    PAID_FILL = PatternFill(start_color='d4edda', end_color='d4edda', fill_type='solid')
 
     try:
         ws = wb.create_sheet(title='Summary', index=0)
@@ -201,15 +225,28 @@ def generate_summary_sheet(filepath: str = None) -> bool:
             row_data = [
                 data['name'], data['student_number'], data['course'], data['year'], data['section'],
                 data['total_sessions'], data['total_sessions'], data['absent_count'], data['late_count'],
-                data['total_fines'], ', '.join(str(s) for s in data['sessions_attended'])
+                data['total_fines'], data['manual_fines'], data['grand_fines'],
+                data['total_paid'], data['balance'],
+                ', '.join(str(s) for s in data['sessions_attended'])
             ]
             for col_idx, value in enumerate(row_data, 1):
                 cell = ws.cell(row=idx, column=col_idx, value=value)
                 cell.border = THIN_BORDER
                 cell.alignment = Alignment(horizontal='center', vertical='center')
-                if col_idx == 10 and value and value > 0:
+                if col_idx == 12 and value and value > 0:
                     cell.fill = ABSENT_FILL
                     cell.font = Font(name='Calibri', bold=True, color='721c24')
+                elif col_idx == 13 and value and value > 0:
+                    cell.fill = PAID_FILL
+                    cell.font = Font(name='Calibri', bold=True, color='155724')
+                elif col_idx == 14:
+                    if value and value > 0:
+                        cell.fill = LATE_FILL
+                        cell.font = Font(name='Calibri', bold=True, color='856404')
+                    elif data['grand_fines'] > 0 and data['balance'] == 0:
+                        cell.value = 'PAID'
+                        cell.fill = PAID_FILL
+                        cell.font = Font(name='Calibri', bold=True, color='155724')
 
         wb.save(filepath)
         return True

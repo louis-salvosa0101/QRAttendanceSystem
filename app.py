@@ -275,7 +275,7 @@ def student_detail_page(student_number):
         'manual_fines': manual_fines_total,
         'total_fines': total_fines + manual_fines_total,
         'total_paid': payments_total,
-        'balance': (total_fines + manual_fines_total) - payments_total,
+        'balance': max(0, (total_fines + manual_fines_total) - payments_total),
     }
 
     return render_template('student_detail.html',
@@ -301,6 +301,20 @@ def api_create_session():
     required_course = data.get('required_course', '')
     required_year = data.get('required_year', [])
     required_section = data.get('required_section', '')
+    scheduled_start = data.get('scheduled_start', '')
+    fine_late = data.get('fine_late')
+    fine_absent = data.get('fine_absent')
+    fine_partial = data.get('fine_partial')
+    late_threshold_minutes = data.get('late_threshold_minutes')
+
+    if fine_late is not None:
+        fine_late = int(fine_late)
+    if fine_absent is not None:
+        fine_absent = int(fine_absent)
+    if fine_partial is not None:
+        fine_partial = int(fine_partial)
+    if late_threshold_minutes is not None:
+        late_threshold_minutes = int(late_threshold_minutes)
 
     session = create_session(
         subject=subject,
@@ -310,6 +324,11 @@ def api_create_session():
         required_course=required_course,
         required_year=required_year,
         required_section=required_section,
+        scheduled_start=scheduled_start,
+        fine_late=fine_late,
+        fine_absent=fine_absent,
+        fine_partial=fine_partial,
+        late_threshold_minutes=late_threshold_minutes,
     )
     return jsonify({'success': True, 'session': session})
 
@@ -341,11 +360,14 @@ def api_close_session(session_id):
     if required_students:
         absent_result = log_absent_students(session_id, session, required_students)
 
+    from config import FINE_ABSENT as _FA, FINE_PARTIAL as _FP
     return jsonify({
         'success': True,
         'message': message,
         'absent_logged': absent_result.get('absent_logged', 0),
         'partial_updated': absent_result.get('partial_updated', 0),
+        'fine_absent': session.get('fine_absent') or _FA,
+        'fine_partial': session.get('fine_partial') or _FP,
     })
 
 
@@ -736,6 +758,24 @@ def api_delete_manual_fine(student_number, fine_id):
     })
 
 
+@app.route('/api/students/<student_number>/fines/clear', methods=['DELETE'])
+@login_required
+def api_clear_manual_fines(student_number):
+    """Delete all manual fines for a student."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "DELETE FROM manual_fines WHERE student_number = %s",
+            (student_number,)
+        )
+        deleted = cur.rowcount
+
+    return jsonify({
+        'success': True,
+        'message': f'{deleted} manual fine(s) removed.' if deleted else 'No manual fines to remove.'
+    })
+
+
 @app.route('/api/students/<student_number>/payments', methods=['POST'])
 @login_required
 def api_add_payment(student_number):
@@ -763,6 +803,32 @@ def api_add_payment(student_number):
     return jsonify({
         'success': True,
         'message': f'Payment of ₱{int(amount)} recorded for {student["name"]}.'
+    })
+
+
+@app.route('/api/students/<student_number>/reset', methods=['DELETE'])
+@login_required
+def api_reset_student_data(student_number):
+    """Reset all data for a student: attendance records, manual fines, and payments."""
+    student = get_student(student_number)
+    if not student or not student.get('student_number'):
+        return jsonify({'success': False, 'message': 'Student not found.'}), 404
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("DELETE FROM attendance_records WHERE student_number = %s", (student_number,))
+        attendance_deleted = cur.rowcount
+        cur.execute("DELETE FROM manual_fines WHERE student_number = %s", (student_number,))
+        fines_deleted = cur.rowcount
+        cur.execute("DELETE FROM fine_payments WHERE student_number = %s", (student_number,))
+        payments_deleted = cur.rowcount
+        cur.execute("DELETE FROM session_scans WHERE student_number = %s", (student_number,))
+
+    return jsonify({
+        'success': True,
+        'message': (f'All data reset for {student["name"]}: '
+                    f'{attendance_deleted} attendance record(s), '
+                    f'{fines_deleted} fine(s), {payments_deleted} payment(s) removed.')
     })
 
 
@@ -952,6 +1018,7 @@ def api_download_records():
 
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
 
     wb = Workbook()
     ws = wb.active
@@ -1012,8 +1079,30 @@ def api_download_records():
         else:
             student_data[sn]['present'] += 1
 
+    # Fetch manual fines and payments per student for the summary
+    all_student_numbers = list(student_data.keys())
+    manual_fines_map = {}
+    payments_map = {}
+    if all_student_numbers:
+        with get_db() as conn:
+            cur = _cur(conn)
+            cur.execute("SELECT student_number, SUM(amount) AS total FROM manual_fines GROUP BY student_number")
+            for row in cur.fetchall():
+                manual_fines_map[row['student_number']] = row['total'] or 0
+            cur.execute("SELECT student_number, SUM(amount) AS total FROM fine_payments GROUP BY student_number")
+            for row in cur.fetchall():
+                payments_map[row['student_number']] = row['total'] or 0
+
+    for sn, sd in student_data.items():
+        sd['manual_fines'] = manual_fines_map.get(sn, 0)
+        sd['total_paid'] = payments_map.get(sn, 0)
+        sd['grand_fines'] = sd['total_fines'] + sd['manual_fines']
+        sd['balance'] = max(0, sd['grand_fines'] - sd['total_paid'])
+
     sum_headers = ['Name', 'Student Number', 'Course', 'Year', 'Section',
-                   'Present', 'Late', 'Absent', 'Total Fines (PHP)']
+                   'Present', 'Late', 'Absent', 'Attendance Fines (PHP)',
+                   'Manual Fines (PHP)', 'Total Fines (PHP)',
+                   'Total Paid (PHP)', 'Balance (PHP)']
     summary_sheet.append(sum_headers)
     sum_fill = PatternFill(start_color="2E75B6", end_color="2E75B6", fill_type="solid")
     sum_font = Font(color="FFFFFF", bold=True)
@@ -1024,26 +1113,56 @@ def api_download_records():
 
     fine_fill = PatternFill(start_color="f8d7da", end_color="f8d7da", fill_type="solid")
     fine_font = Font(bold=True, color='721c24')
+    paid_fill = PatternFill(start_color="d4edda", end_color="d4edda", fill_type="solid")
+    paid_font = Font(bold=True, color='155724')
+    balance_fill = PatternFill(start_color="fff3cd", end_color="fff3cd", fill_type="solid")
+    balance_font = Font(bold=True, color='856404')
     for sd in sorted(student_data.values(), key=lambda x: x['name']):
         summary_sheet.append([
             sd['name'], sd['student_number'], sd['course'], sd['year'], sd['section'],
-            sd['present'], sd['late'], sd['absent'], sd['total_fines'],
+            sd['present'], sd['late'], sd['absent'],
+            sd['total_fines'], sd['manual_fines'], sd['grand_fines'],
+            sd['total_paid'], sd['balance'],
         ])
         row_num = summary_sheet.max_row
-        fine_cell = summary_sheet.cell(row=row_num, column=9)
-        if sd['total_fines'] > 0:
-            fine_cell.fill = fine_fill
-            fine_cell.font = fine_font
+        # Highlight fines column
+        fines_cell = summary_sheet.cell(row=row_num, column=11)
+        if sd['grand_fines'] > 0:
+            fines_cell.fill = fine_fill
+            fines_cell.font = fine_font
+        # Highlight paid column
+        paid_cell = summary_sheet.cell(row=row_num, column=12)
+        if sd['total_paid'] > 0:
+            paid_cell.fill = paid_fill
+            paid_cell.font = paid_font
+        # Highlight balance column
+        balance_cell = summary_sheet.cell(row=row_num, column=13)
+        if sd['balance'] > 0:
+            balance_cell.fill = balance_fill
+            balance_cell.font = balance_font
+        elif sd['grand_fines'] > 0 and sd['balance'] == 0:
+            balance_cell.fill = paid_fill
+            balance_cell.font = paid_font
+            balance_cell.value = 'PAID'
+
+    grand_total_fines = sum(sd['grand_fines'] for sd in student_data.values())
+    grand_total_paid = sum(sd['total_paid'] for sd in student_data.values())
+    grand_balance = max(0, grand_total_fines - grand_total_paid)
 
     grand_row = summary_sheet.max_row + 2
-    summary_sheet.cell(row=grand_row, column=8, value='GRAND TOTAL:').font = Font(bold=True, size=12)
-    summary_sheet.cell(row=grand_row, column=8).alignment = Alignment(horizontal='right')
-    summary_sheet.cell(row=grand_row, column=9, value=total_fines).font = Font(bold=True, size=13, color='C00000')
-    summary_sheet.cell(row=grand_row, column=9).alignment = Alignment(horizontal='center')
+    summary_sheet.cell(row=grand_row, column=10, value='GRAND TOTAL:').font = Font(bold=True, size=12)
+    summary_sheet.cell(row=grand_row, column=10).alignment = Alignment(horizontal='right')
+    summary_sheet.cell(row=grand_row, column=11, value=grand_total_fines).font = Font(bold=True, size=13, color='C00000')
+    summary_sheet.cell(row=grand_row, column=11).alignment = Alignment(horizontal='center')
+    summary_sheet.cell(row=grand_row, column=12, value=grand_total_paid).font = Font(bold=True, size=13, color='155724')
+    summary_sheet.cell(row=grand_row, column=12).alignment = Alignment(horizontal='center')
+    summary_sheet.cell(row=grand_row, column=13, value=grand_balance).font = Font(bold=True, size=13, color='856404')
+    summary_sheet.cell(row=grand_row, column=13).alignment = Alignment(horizontal='center')
 
-    sum_widths = [30, 20, 15, 8, 10, 10, 10, 10, 20]
+    sum_widths = [30, 20, 15, 8, 10, 10, 10, 10, 20, 18, 18, 18, 18]
     for i, w in enumerate(sum_widths, 1):
-        summary_sheet.column_dimensions[chr(64 + i)].width = w
+        col_letter = get_column_letter(i)
+        summary_sheet.column_dimensions[col_letter].width = w
 
     out = io.BytesIO()
     wb.save(out)

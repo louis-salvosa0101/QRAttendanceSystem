@@ -12,6 +12,11 @@ from config import (SESSION_DURATION_HOURS, FINE_LATE, FINE_ABSENT,
                     FINE_PARTIAL, LATE_THRESHOLD_MINUTES)
 from db import get_db, _cur
 
+_SESSION_COLS = """session_id, subject, teacher, notes, created_at, expires_at,
+               is_active, required_course, required_year, required_section,
+               scheduled_start, fine_late, fine_absent, fine_partial,
+               late_threshold_minutes"""
+
 
 def _session_row_to_dict(row, scanned_students: dict = None) -> dict:
     """Convert session row to full session dict with scanned_students."""
@@ -57,13 +62,26 @@ def create_session(subject: str = "", teacher: str = "", notes: str = "",
                    duration_hours: float = None,
                    required_course: str = "",
                    required_year: list = None,
-                   required_section: str = "") -> dict:
+                   required_section: str = "",
+                   scheduled_start: str = "",
+                   fine_late: int = None,
+                   fine_absent: int = None,
+                   fine_partial: int = None,
+                   late_threshold_minutes: int = None) -> dict:
     """
     Create a new attendance session.
     Returns the session data including the unique session ID.
     """
     if duration_hours is None:
         duration_hours = SESSION_DURATION_HOURS
+    if fine_late is None:
+        fine_late = FINE_LATE
+    if fine_absent is None:
+        fine_absent = FINE_ABSENT
+    if fine_partial is None:
+        fine_partial = FINE_PARTIAL
+    if late_threshold_minutes is None:
+        late_threshold_minutes = LATE_THRESHOLD_MINUTES
 
     token_chars = string.ascii_uppercase + string.digits
     session_id = ''.join(secrets.choice(token_chars) for _ in range(8))
@@ -76,10 +94,13 @@ def create_session(subject: str = "", teacher: str = "", notes: str = "",
         cur = _cur(conn)
         cur.execute(
             """INSERT INTO sessions (session_id, subject, teacher, notes, created_at, expires_at,
-               is_active, required_course, required_year, required_section)
-               VALUES (%s, %s, %s, %s, %s, %s, 1, %s, %s, %s)""",
+               is_active, required_course, required_year, required_section,
+               scheduled_start, fine_late, fine_absent, fine_partial, late_threshold_minutes)
+               VALUES (%s, %s, %s, %s, %s, %s, 1, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (session_id, subject, teacher, notes, now.isoformat(), expires_at.isoformat(),
-             required_course, required_year_json, required_section)
+             required_course, required_year_json, required_section,
+             scheduled_start or None, fine_late, fine_absent, fine_partial,
+             late_threshold_minutes)
         )
 
     session = get_session(session_id)
@@ -91,9 +112,7 @@ def get_session(session_id: str) -> dict | None:
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
-            """SELECT session_id, subject, teacher, notes, created_at, expires_at,
-               is_active, required_course, required_year, required_section
-               FROM sessions WHERE session_id = %s""",
+            f"SELECT {_SESSION_COLS} FROM sessions WHERE session_id = %s",
             (session_id,)
         )
         row = cur.fetchone()
@@ -115,9 +134,8 @@ def get_active_sessions() -> list:
         )
 
         cur.execute(
-            """SELECT session_id, subject, teacher, notes, created_at, expires_at,
-               is_active, required_course, required_year, required_section
-               FROM sessions WHERE is_active = 1 AND expires_at > %s""",
+            f"""SELECT {_SESSION_COLS}
+                FROM sessions WHERE is_active = 1 AND expires_at > %s""",
             (now.isoformat(),)
         )
         rows = cur.fetchall()
@@ -135,9 +153,7 @@ def get_all_sessions() -> list:
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
-            """SELECT session_id, subject, teacher, notes, created_at, expires_at,
-               is_active, required_course, required_year, required_section
-               FROM sessions ORDER BY created_at DESC"""
+            f"SELECT {_SESSION_COLS} FROM sessions ORDER BY created_at DESC"
         )
         rows = cur.fetchall()
 
@@ -190,10 +206,14 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
 
     if student_number not in scanned:
         # First scan -> Time In
-        session_start = datetime.fromisoformat(session['created_at'])
+        s_fine_late = session.get('fine_late') or FINE_LATE
+        s_threshold = session.get('late_threshold_minutes') or LATE_THRESHOLD_MINUTES
+        session_start = datetime.fromisoformat(
+            session.get('scheduled_start') or session['created_at']
+        )
         minutes_late = (now - session_start).total_seconds() / 60
-        fine = FINE_LATE if minutes_late > LATE_THRESHOLD_MINUTES else 0
-        fine_reason = f'Late by {int(minutes_late)} min (>{LATE_THRESHOLD_MINUTES} min threshold)' if fine else ''
+        fine = s_fine_late if minutes_late > s_threshold else 0
+        fine_reason = f'Late by {int(minutes_late)} min (>{s_threshold} min threshold)' if fine else ''
 
         with get_db() as conn:
             cur = _cur(conn)
@@ -232,9 +252,7 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
 
     # 1. Fetch session row
     cur.execute(
-        """SELECT session_id, subject, teacher, notes, created_at, expires_at,
-               is_active, required_course, required_year, required_section
-           FROM sessions WHERE session_id = %s""",
+        f"SELECT {_SESSION_COLS} FROM sessions WHERE session_id = %s",
         (session_id,),
     )
     row = cur.fetchone()
@@ -271,11 +289,15 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
 
     if existing is None:
         # First scan -> Time In
-        session_start = datetime.fromisoformat(session['created_at'])
+        s_fine_late = session.get('fine_late') or FINE_LATE
+        s_threshold = session.get('late_threshold_minutes') or LATE_THRESHOLD_MINUTES
+        session_start = datetime.fromisoformat(
+            session.get('scheduled_start') or session['created_at']
+        )
         minutes_late = (now - session_start).total_seconds() / 60
-        fine = FINE_LATE if minutes_late > LATE_THRESHOLD_MINUTES else 0
+        fine = s_fine_late if minutes_late > s_threshold else 0
         fine_reason = (
-            f'Late by {int(minutes_late)} min (>{LATE_THRESHOLD_MINUTES} min threshold)'
+            f'Late by {int(minutes_late)} min (>{s_threshold} min threshold)'
             if fine else ''
         )
         cur.execute(
@@ -314,9 +336,7 @@ def get_session_row(conn, session_id: str) -> dict | None:
     """Lightweight session fetch on an existing connection (no scanned-students load)."""
     cur = _cur(conn)
     cur.execute(
-        """SELECT session_id, subject, teacher, notes, created_at, expires_at,
-               is_active, required_course, required_year, required_section
-           FROM sessions WHERE session_id = %s""",
+        f"SELECT {_SESSION_COLS} FROM sessions WHERE session_id = %s",
         (session_id,),
     )
     row = cur.fetchone()
@@ -342,17 +362,18 @@ def close_session(session_id: str) -> tuple:
     if not session:
         return False, "Session not found."
 
+    s_fine_partial = session.get('fine_partial') or FINE_PARTIAL
+
     with get_db() as conn:
         cur = _cur(conn)
         scanned = session.get('scanned_students', {})
         for student_number, info in scanned.items():
             if info.get('status') == 'in':
-                current_fine = FINE_PARTIAL
                 partial_reason = 'No Time Out recorded (partial scan) - considered late'
                 cur.execute(
                     """UPDATE session_scans SET fine = %s, fine_reason = %s
                        WHERE session_id = %s AND student_number = %s""",
-                    (current_fine, partial_reason, session_id, student_number)
+                    (s_fine_partial, partial_reason, session_id, student_number)
                 )
         cur.execute("UPDATE sessions SET is_active = 0 WHERE session_id = %s", (session_id,))
 

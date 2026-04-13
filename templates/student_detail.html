@@ -44,6 +44,10 @@
                     <i data-lucide="banknote"></i>
                     Record Payment
                 </button>
+                <button onclick="resetStudentData()" class="btn btn-sm btn-outline" style="cursor:pointer;border-color:var(--accent-danger);color:var(--accent-danger);" id="btn-reset-data">
+                    <i data-lucide="rotate-ccw"></i>
+                    Reset Data
+                </button>
             </div>
         </div>
     </div>
@@ -177,6 +181,10 @@
             <div style="display:flex;align-items:center;gap:8px;">
                 {% if manual_fines %}
                 <span class="badge badge-danger">{{ manual_fines|length }} fine{{ 's' if manual_fines|length != 1 }} &middot; ₱{{ summary.manual_fines }}</span>
+                <button onclick="clearAllManualFines()" class="btn btn-sm" style="padding:4px 10px;font-size:12px;background:none;border:1px solid var(--accent-danger);color:var(--accent-danger);cursor:pointer;" title="Delete all manual fines">
+                    <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
+                    Clear All
+                </button>
                 {% endif %}
                 <button onclick="openAddFineModal()" class="btn btn-sm btn-primary" style="padding:4px 10px;font-size:12px;cursor:pointer;">
                     <i data-lucide="plus" style="width:14px;height:14px;"></i>
@@ -576,6 +584,21 @@
         }
     }
 
+    async function clearAllManualFines() {
+        if (!confirm('Delete ALL manual fines for this student? This cannot be undone.')) return;
+        try {
+            const data = await apiCall(`/api/students/${STUDENT_NUMBER}/fines/clear`, 'DELETE');
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(data.message, 'error');
+            }
+        } catch (err) {
+            showToast('Failed to clear fines.', 'error');
+        }
+    }
+
     async function deletePayment(paymentId) {
         if (!confirm('Remove this payment record?')) return;
         try {
@@ -588,6 +611,27 @@
             }
         } catch (err) {
             showToast('Failed to remove payment.', 'error');
+        }
+    }
+
+    async function resetStudentData() {
+        if (!confirm('⚠️ Reset ALL data for this student?\n\nThis will permanently delete:\n• All attendance records\n• All manual fines\n• All payment records\n• All session scan history\n\nThis action cannot be undone.')) return;
+        if (!confirm('Are you absolutely sure? This cannot be reversed.')) return;
+
+        const btn = document.getElementById('btn-reset-data');
+        btn.disabled = true;
+        try {
+            const data = await apiCall(`/api/students/${STUDENT_NUMBER}/reset`, 'DELETE');
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.message, 'error');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            showToast('Failed to reset student data.', 'error');
+            btn.disabled = false;
         }
     }
 

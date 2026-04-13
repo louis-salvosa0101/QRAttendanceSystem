@@ -85,9 +85,24 @@ def init_db():
                     is_active INTEGER DEFAULT 1,
                     required_course TEXT,
                     required_year TEXT,
-                    required_section TEXT
+                    required_section TEXT,
+                    scheduled_start TEXT,
+                    fine_late INTEGER DEFAULT 25,
+                    fine_absent INTEGER DEFAULT 50,
+                    fine_partial INTEGER DEFAULT 25,
+                    late_threshold_minutes INTEGER DEFAULT 15
                 )
             """)
+            for col, defn in [
+                ('scheduled_start', 'TEXT'),
+                ('fine_late', 'INTEGER DEFAULT 25'),
+                ('fine_absent', 'INTEGER DEFAULT 50'),
+                ('fine_partial', 'INTEGER DEFAULT 25'),
+                ('late_threshold_minutes', 'INTEGER DEFAULT 15'),
+            ]:
+                cur.execute(
+                    f"ALTER TABLE sessions ADD COLUMN IF NOT EXISTS {col} {defn}"
+                )
             cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active)")
 
