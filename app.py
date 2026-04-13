@@ -1076,6 +1076,21 @@ def api_reset_records():
         return jsonify({'success': False, 'message': str(e)})
 
 
+@app.route('/api/records/session/<session_id>', methods=['DELETE'])
+@login_required
+def api_delete_session_records(session_id):
+    """Delete all attendance records for a specific session."""
+    try:
+        deleted = clear_session_records(session_id)
+        return jsonify({
+            'success': True,
+            'message': f'{deleted} record(s) removed from session {session_id}.' if deleted
+            else 'No records found for this session.'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
 @app.route('/api/qrcodes/list')
 @login_required
 def api_list_qrcodes():

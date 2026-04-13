@@ -142,7 +142,12 @@
                         <i data-lucide="calendar-clock" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;"></i>
                         Session: {{ session_id }}
                     </div>
-                    <span class="badge badge-info">{{ session_records|list|length }} Records</span>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <span class="badge badge-info">{{ session_records|list|length }} Records</span>
+                        <button onclick="deleteSessionRecords('{{ session_id }}')" class="btn btn-sm" style="padding:4px 10px;font-size:12px;background:none;border:1px solid var(--accent-danger);color:var(--accent-danger);cursor:pointer;border-radius:var(--radius-sm);" title="Delete records for this session">
+                            <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="table-container" style="border-radius: 0;">
                     <table>
@@ -247,6 +252,23 @@
             }
         } catch(e) {
             showToast('Error resetting records.', 'error');
+        }
+    }
+
+    async function deleteSessionRecords(sessionId) {
+        if (!confirm(`Delete all attendance records for session "${sessionId}"? This cannot be undone.`)) return;
+
+        try {
+            const response = await fetch(`/api/records/session/${sessionId}`, { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(result.message || 'Failed to delete session records.', 'error');
+            }
+        } catch(e) {
+            showToast('Error deleting session records.', 'error');
         }
     }
 
