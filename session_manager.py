@@ -87,7 +87,15 @@ def create_session(subject: str = "", teacher: str = "", notes: str = "",
     session_id = ''.join(secrets.choice(token_chars) for _ in range(8))
 
     now = datetime.now()
-    expires_at = now + timedelta(hours=float(duration_hours))
+    if scheduled_start:
+        try:
+            start_dt = datetime.fromisoformat(
+                scheduled_start.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            start_dt = now
+    else:
+        start_dt = now
+    expires_at = start_dt + timedelta(hours=float(duration_hours))
     required_year_json = json.dumps(required_year or [])
 
     with get_db() as conn:

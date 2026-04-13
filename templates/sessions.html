@@ -188,7 +188,7 @@
                         <div class="session-meta-label">Scheduled</div>
                         <div class="session-meta-value">
                             {% if session.scheduled_start %}
-                                {{ session.scheduled_start[:16] }}
+                                {{ session.scheduled_start|fmt_dt }}
                             {% else %}
                                 <span style="color:var(--text-muted);font-size:11px;">Immediate</span>
                             {% endif %}
@@ -196,7 +196,7 @@
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Expires</div>
-                        <div class="session-meta-value">{{ session.expires_at[:16] }}</div>
+                        <div class="session-meta-value">{{ session.expires_at|fmt_dt }}</div>
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Attendance</div>
@@ -305,7 +305,7 @@
                             {% if not session.required_course and not session.required_year and not session.required_section %}All{% endif %}
                         </td>
                         <td style="font-size:11px;">
-                            {% if session.scheduled_start %}{{ session.scheduled_start[:16] }}{% else %}—{% endif %}
+                            {% if session.scheduled_start %}{{ session.scheduled_start|fmt_dt }}{% else %}—{% endif %}
                         </td>
                         <td style="font-size:11px;white-space:nowrap;">
                             ₱{{ session.fine_late or 25 }}/₱{{ session.fine_partial or 25 }}/₱{{ session.fine_absent or 50 }}
@@ -379,7 +379,7 @@
         const required_section = document.getElementById('sessionSection').value;
 
         const scheduledRaw = document.getElementById('sessionScheduledStart').value;
-        const scheduled_start = scheduledRaw ? new Date(scheduledRaw).toISOString() : '';
+        const scheduled_start = scheduledRaw || '';
         const late_threshold_minutes = document.getElementById('sessionLateThreshold').value;
         const fine_late = document.getElementById('sessionFineLate').value;
         const fine_partial = document.getElementById('sessionFinePartial').value;

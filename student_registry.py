@@ -111,6 +111,58 @@ def get_students_by_filter(course: str = None,
     return result
 
 
+def update_student(student_number: str, name: str = None, course: str = None,
+                   year: str = None, section: str = None,
+                   new_student_number: str = None) -> tuple:
+    """
+    Update a student's profile fields.  When *new_student_number* differs from
+    the current one, cascade the change to every related table.
+    Returns (success: bool, message: str).
+    """
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT * FROM students WHERE student_number = %s",
+                    (student_number,))
+        existing = cur.fetchone()
+        if not existing:
+            return False, "Student not found."
+
+        upd_name = name.strip() if name is not None else existing['name']
+        upd_course = course.strip() if course is not None else existing['course']
+        upd_year = year.strip() if year is not None else existing['year']
+        upd_section = section.strip() if section is not None else existing['section']
+
+        sn_changed = (new_student_number
+                      and new_student_number.strip() != student_number)
+        target_sn = new_student_number.strip() if sn_changed else student_number
+
+        if sn_changed:
+            cur.execute("SELECT 1 FROM students WHERE student_number = %s",
+                        (target_sn,))
+            if cur.fetchone():
+                return False, f"Student number {target_sn} already exists."
+
+            for tbl, col in [('attendance_records', 'student_number'),
+                             ('session_scans', 'student_number'),
+                             ('manual_fines', 'student_number'),
+                             ('fine_payments', 'student_number')]:
+                cur.execute(
+                    f"UPDATE {tbl} SET {col} = %s WHERE {col} = %s",
+                    (target_sn, student_number),
+                )
+
+        cur.execute(
+            """UPDATE students
+               SET student_number = %s, name = %s, course = %s,
+                   year = %s, section = %s
+               WHERE student_number = %s""",
+            (target_sn, upd_name, upd_course, upd_year, upd_section,
+             student_number),
+        )
+
+    return True, "Student profile updated."
+
+
 def delete_student(student_number: str) -> bool:
     """Delete a student from the registry."""
     with get_db() as conn:

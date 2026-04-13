@@ -186,7 +186,7 @@
                                 {% elif record.status == 'Time In' %}records-row-success
                                 {% endif %}">
                                 <td style="color:var(--text-muted);font-size:12px;">{{ loop.index }}</td>
-                                <td style="font-family:'Inter',monospace;font-size:12px;white-space:nowrap;">{{ record.datetime }}</td>
+                                <td style="font-family:'Inter',monospace;font-size:12px;white-space:nowrap;">{{ record.datetime|fmt_dt }}</td>
                                 <td style="font-weight:600;color:var(--text-primary);">{{ record.name }}</td>
                                 <td style="font-family:'Inter',monospace;font-size:12px;">{{ record.student_number }}</td>
                                 <td>{{ record.course }}</td>

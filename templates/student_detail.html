@@ -89,6 +89,10 @@
                 </div>
             </div>
             <div class="profile-actions">
+                <button onclick="openEditProfileModal()" class="btn btn-sm btn-outline" id="btn-edit-profile">
+                    <i data-lucide="pencil"></i>
+                    Edit
+                </button>
                 <button onclick="openAddFineModal()" class="btn btn-sm btn-primary" id="btn-add-fine">
                     <i data-lucide="plus-circle"></i>
                     Fine
@@ -175,7 +179,7 @@
                     <tbody>
                         {% for f in fines_list %}
                         <tr>
-                            <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ f.date[:16] }}</td>
+                            <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ f.date|fmt_dt }}</td>
                             <td><span class="badge badge-info" style="font-size:10px;">{{ f.session_id }}</span></td>
                             <td>
                                 {% if f.status == 'Absent' %}<span class="badge badge-danger">Absent</span>
@@ -233,7 +237,7 @@
                     <tbody>
                         {% for mf in manual_fines %}
                         <tr>
-                            <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ mf.created_at[:16] }}</td>
+                            <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ mf.created_at|fmt_dt }}</td>
                             <td style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ mf.reason }}">{{ mf.reason }}</td>
                             <td style="font-weight:700;color:var(--accent-danger);">₱{{ mf.amount }}</td>
                             <td style="font-size:11px;color:var(--text-muted);">{{ mf.created_by or '—' }}</td>
@@ -291,7 +295,7 @@
                     <tbody>
                         {% for p in payments %}
                         <tr>
-                            <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ p.created_at[:16] }}</td>
+                            <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ p.created_at|fmt_dt }}</td>
                             <td style="font-weight:700;color:var(--accent-success);">₱{{ p.amount }}</td>
                             <td style="font-size:11px;color:var(--text-muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ p.notes or '' }}">{{ p.notes or '—' }}</td>
                             <td style="font-size:11px;color:var(--text-muted);">{{ p.created_by or '—' }}</td>
@@ -380,7 +384,7 @@
                 <tbody>
                     {% for r in records|reverse %}
                     <tr>
-                        <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.datetime }}</td>
+                        <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.datetime|fmt_dt }}</td>
                         <td><span class="badge badge-info" style="font-size:10px;">{{ r.session_id }}</span></td>
                         <td>
                             {% if r.status == 'Time In' %}<span class="badge badge-success">In</span>
@@ -482,6 +486,54 @@
                     <button type="submit" class="btn btn-sm btn-success" id="paymentSubmitBtn">
                         <i data-lucide="check"></i>
                         Record
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Edit Profile Modal -->
+<div class="modal-overlay" id="editProfileModal">
+    <div class="modal" style="max-width:460px;">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i data-lucide="user-pen" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;color:var(--accent-primary);"></i>
+                Edit Profile
+            </h3>
+            <button class="modal-close" onclick="closeEditProfileModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="editProfileForm" onsubmit="submitEditProfile(event)">
+                <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" id="editName" class="form-input" required value="{{ student.name }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Student Number</label>
+                    <input type="text" id="editStudentNumber" class="form-input" required value="{{ student.student_number }}">
+                    <span style="font-size:10px;color:var(--text-muted);margin-top:4px;display:block;">
+                        Changing this will update all linked records.
+                    </span>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Course / Program</label>
+                        <input type="text" id="editCourse" class="form-input" value="{{ student.course or '' }}" placeholder="e.g. BSCS">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Year</label>
+                        <input type="text" id="editYear" class="form-input" value="{{ student.year or '' }}" placeholder="e.g. 3">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Section</label>
+                        <input type="text" id="editSection" class="form-input" value="{{ student.section or '' }}" placeholder="e.g. A">
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="closeEditProfileModal()">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="editProfileSubmitBtn">
+                        <i data-lucide="check"></i>
+                        Save Changes
                     </button>
                 </div>
             </form>
@@ -609,8 +661,58 @@
         } catch (err) { showToast('Failed to reset.', 'error'); btn.disabled = false; }
     }
 
+    function openEditProfileModal() {
+        document.getElementById('editProfileSubmitBtn').disabled = false;
+        document.getElementById('editProfileModal').classList.add('active');
+        lucide.createIcons();
+        setTimeout(() => document.getElementById('editName').focus(), 200);
+    }
+
+    function closeEditProfileModal() {
+        document.getElementById('editProfileModal').classList.remove('active');
+    }
+
+    async function submitEditProfile(e) {
+        e.preventDefault();
+        const btn = document.getElementById('editProfileSubmitBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Saving...';
+
+        const name = document.getElementById('editName').value.trim();
+        const newSn = document.getElementById('editStudentNumber').value.trim();
+        const course = document.getElementById('editCourse').value.trim();
+        const year = document.getElementById('editYear').value.trim();
+        const section = document.getElementById('editSection').value.trim();
+
+        if (!name) { showToast('Name is required.', 'error'); btn.disabled = false; btn.innerHTML = '<i data-lucide="check"></i> Save Changes'; lucide.createIcons(); return; }
+        if (!newSn) { showToast('Student number is required.', 'error'); btn.disabled = false; btn.innerHTML = '<i data-lucide="check"></i> Save Changes'; lucide.createIcons(); return; }
+
+        try {
+            const data = await apiCall(`/api/students/${STUDENT_NUMBER}`, 'PUT', {
+                name, course, year, section,
+                new_student_number: newSn
+            });
+            if (data.success) {
+                showToast(data.message, 'success');
+                const redirectSn = data.student_number || STUDENT_NUMBER;
+                setTimeout(() => { window.location.href = `/students/${redirectSn}`; }, 800);
+            } else {
+                showToast(data.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="check"></i> Save Changes';
+                lucide.createIcons();
+            }
+        } catch (err) {
+            showToast('Failed to update profile.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="check"></i> Save Changes';
+            lucide.createIcons();
+        }
+    }
+
     document.getElementById('addFineModal')?.addEventListener('click', function(e) { if (e.target === this) closeAddFineModal(); });
     document.getElementById('paymentModal')?.addEventListener('click', function(e) { if (e.target === this) closePaymentModal(); });
+    document.getElementById('editProfileModal')?.addEventListener('click', function(e) { if (e.target === this) closeEditProfileModal(); });
 
     lucide.createIcons();
 </script>

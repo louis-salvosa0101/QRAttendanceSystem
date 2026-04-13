@@ -28,7 +28,8 @@ from excel_logger import (log_attendance, log_absent_students,
 from student_registry import (register_student, register_students_bulk,
                                get_all_students, get_student,
                                get_students_by_filter, delete_student,
-                               clear_registry, get_registry_stats)
+                               update_student, clear_registry,
+                               get_registry_stats)
 
 from db import init_db
 from auth import login_manager, authenticate, seed_default_admin, hash_password
@@ -37,6 +38,23 @@ init_db()
 seed_default_admin()
 
 app = Flask(__name__)
+
+
+@app.template_filter('fmt_dt')
+def fmt_dt_filter(value):
+    """Format an ISO-ish datetime string into 12-hour format like 'Apr 14, 2026 2:30 PM'."""
+    if not value:
+        return '—'
+    try:
+        raw = str(value).replace('Z', '+00:00')
+        dt = datetime.fromisoformat(raw)
+        hour = dt.hour % 12 or 12
+        return f"{dt.strftime('%b')} {dt.day}, {dt.year} {hour}:{dt.strftime('%M %p')}"
+    except (ValueError, TypeError):
+        fallback = str(value)[:16].replace('T', ' ')
+        return fallback if fallback else '—'
+
+
 app.secret_key = SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 
@@ -700,6 +718,24 @@ def api_import_students():
         })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/students/<student_number>', methods=['PUT'])
+@login_required
+def api_update_student(student_number):
+    """Update a student's profile information."""
+    data = request.get_json() or {}
+    success, message = update_student(
+        student_number,
+        name=data.get('name'),
+        course=data.get('course'),
+        year=data.get('year'),
+        section=data.get('section'),
+        new_student_number=data.get('new_student_number'),
+    )
+    new_sn = (data.get('new_student_number') or '').strip() or student_number
+    return jsonify({'success': success, 'message': message,
+                    'student_number': new_sn if success else student_number})
 
 
 @app.route('/api/students/<student_number>', methods=['DELETE'])

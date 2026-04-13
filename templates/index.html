@@ -104,7 +104,7 @@
                 </div>
                 <div class="session-meta-item">
                     <div class="session-meta-label">Expires</div>
-                    <div class="session-meta-value">{{ session.expires_at[:16] }}</div>
+                    <div class="session-meta-value">{{ session.expires_at|fmt_dt }}</div>
                 </div>
             </div>
         </div>
