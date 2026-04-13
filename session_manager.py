@@ -123,15 +123,27 @@ def get_session(session_id: str) -> dict | None:
 
 
 def get_active_sessions() -> list:
-    """Get all currently active sessions."""
+    """Get all currently active sessions, auto-expiring any that are past due."""
     now = datetime.now()
+    expired_ids = []
+
     with get_db() as conn:
         cur = _cur(conn)
+
         cur.execute(
-            """UPDATE sessions SET is_active = 0
-               WHERE is_active = 1 AND expires_at <= %s""",
+            f"""SELECT {_SESSION_COLS}
+                FROM sessions WHERE is_active = 1 AND expires_at <= %s""",
             (now.isoformat(),)
         )
+        expired_rows = cur.fetchall()
+        expired_ids = [r['session_id'] for r in expired_rows]
+
+        if expired_ids:
+            cur.execute(
+                """UPDATE sessions SET is_active = 0
+                   WHERE is_active = 1 AND expires_at <= %s""",
+                (now.isoformat(),)
+            )
 
         cur.execute(
             f"""SELECT {_SESSION_COLS}
@@ -140,12 +152,54 @@ def get_active_sessions() -> list:
         )
         rows = cur.fetchall()
 
+    if expired_ids:
+        _handle_auto_expired(expired_ids)
+
     result = []
     for row in rows:
         session = get_session(row['session_id'])
         if session:
             result.append(session)
     return result
+
+
+def _handle_auto_expired(session_ids: list):
+    """Process absent/partial logging for sessions that auto-expired.
+
+    Mirrors the logic in api_close_session: mark partial scans with fines
+    in session_scans, then log absent/partial students to attendance_records.
+    """
+    from excel_logger import log_absent_students
+    from student_registry import get_students_by_filter
+
+    for sid in session_ids:
+        session = get_session(sid)
+        if not session:
+            continue
+
+        s_fine_partial = session.get('fine_partial') or FINE_PARTIAL
+        scanned = session.get('scanned_students', {})
+
+        with get_db() as conn:
+            cur = _cur(conn)
+            for student_number, info in scanned.items():
+                if info.get('status') == 'in':
+                    cur.execute(
+                        """UPDATE session_scans SET fine = %s, fine_reason = %s
+                           WHERE session_id = %s AND student_number = %s""",
+                        (s_fine_partial,
+                         'No Time Out recorded (partial scan) - considered late',
+                         sid, student_number)
+                    )
+
+        session = get_session(sid)
+        required_students = get_students_by_filter(
+            course=session.get('required_course') or None,
+            year=session.get('required_year') or None,
+            section=session.get('required_section') or None,
+        )
+        if required_students:
+            log_absent_students(sid, session, required_students)
 
 
 def get_all_sessions() -> list:
@@ -186,6 +240,7 @@ def validate_session(session_id: str) -> tuple:
                 "UPDATE sessions SET is_active = 0 WHERE session_id = %s",
                 (session_id,)
             )
+        _handle_auto_expired([session_id])
         return False, "Session has expired."
 
     return True, "Session is active."
@@ -271,6 +326,7 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
             "UPDATE sessions SET is_active = 0 WHERE session_id = %s",
             (session_id,),
         )
+        _handle_auto_expired([session_id])
         return False, "Session has expired.", None, 0, '', 0
 
     # 2. Check course / year / section requirements (returned to caller)

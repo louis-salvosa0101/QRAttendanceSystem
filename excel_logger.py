@@ -108,6 +108,14 @@ def log_absent_students(session_id: str, session_data: dict,
             student_number = str(student.get('student_number', ''))
             scan_info = scanned.get(student_number, {})
 
+            cur.execute(
+                """SELECT COUNT(*) AS cnt FROM attendance_records
+                   WHERE session_id = %s AND student_number = %s""",
+                (session_id, student_number)
+            )
+            if cur.fetchone()['cnt'] > 0 and not scan_info:
+                continue
+
             if not scan_info:
                 cur.execute(
                     """INSERT INTO attendance_records
