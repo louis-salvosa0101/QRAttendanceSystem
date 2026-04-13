@@ -18,7 +18,7 @@ from qr_generator import generate_single_qr, batch_generate_from_excel
 from session_manager import (create_session, get_session, get_active_sessions,
                               get_all_sessions, validate_session,
                               record_student_scan, close_session, clear_all_sessions,
-                              process_scan, get_session_row)
+                              delete_session, process_scan, get_session_row)
 from db import get_db, _cur
 from excel_logger import (log_attendance, log_absent_students,
                            generate_summary_sheet,
@@ -381,6 +381,21 @@ def api_clear_session_history():
             'success': True,
             'message': f'Session history cleared ({deleted} sessions removed).' if deleted
             else 'No session history to clear.'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/session/<session_id>', methods=['DELETE'])
+@login_required
+def api_delete_session(session_id):
+    """Delete a specific session and its associated scans."""
+    try:
+        deleted = delete_session(session_id)
+        return jsonify({
+            'success': True,
+            'message': f'Session {session_id} deleted.' if deleted
+            else f'Session {session_id} not found.'
         })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})

@@ -380,6 +380,16 @@ def close_session(session_id: str) -> tuple:
     return True, "Session closed successfully."
 
 
+def delete_session(session_id: str) -> bool:
+    """Delete a single session, its scans, and attendance records."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("DELETE FROM attendance_records WHERE session_id = %s", (session_id,))
+        cur.execute("DELETE FROM session_scans WHERE session_id = %s", (session_id,))
+        cur.execute("DELETE FROM sessions WHERE session_id = %s", (session_id,))
+        return cur.rowcount > 0
+
+
 def clear_all_sessions() -> int:
     """Clear all sessions from the database. Returns count deleted."""
     with get_db() as conn:

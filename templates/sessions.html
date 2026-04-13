@@ -287,6 +287,7 @@
                         <th>Fines (L/P/A)</th>
                         <th>Count</th>
                         <th>Status</th>
+                        <th style="width:60px;text-align:center;">Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -318,6 +319,11 @@
                             {% else %}
                                 <span class="badge badge-danger">Closed</span>
                             {% endif %}
+                        </td>
+                        <td style="text-align:center;">
+                            <button class="btn btn-sm btn-danger" onclick="deleteSession('{{ session.session_id }}')" title="Delete session" style="padding:4px 8px;min-width:unset;">
+                                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                            </button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -420,6 +426,23 @@
             }
         } catch(e) {
             showToast('Error closing session.', 'error');
+        }
+    }
+
+    async function deleteSession(sessionId) {
+        if (!confirm(`Delete session ${sessionId}? This will also remove all its scan records.`)) return;
+
+        try {
+            const response = await fetch(`/api/session/${sessionId}`, { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(result.message || 'Failed to delete session.', 'error');
+            }
+        } catch(e) {
+            showToast('Error deleting session.', 'error');
         }
     }
 
