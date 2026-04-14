@@ -42,10 +42,32 @@
                 <i data-lucide="bar-chart-3"></i>
                 Summary
             </button>
-            <a href="/api/records/download" class="btn btn-sm btn-success" id="btn-download-records">
-                <i data-lucide="download"></i>
-                Download
-            </a>
+            <div style="position:relative;display:inline-block;" id="export-dropdown-wrap">
+                <button class="btn btn-sm btn-success" onclick="toggleExportDropdown()" id="btn-download-records" type="button">
+                    <i data-lucide="download"></i>
+                    Export
+                    <i data-lucide="chevron-down" style="width:14px;height:14px;margin-left:2px;"></i>
+                </button>
+                <div id="export-dropdown" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);z-index:50;min-width:260px;max-height:320px;overflow-y:auto;">
+                    <div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Export by Session</div>
+                    <a href="/api/records/download" class="export-dropdown-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-input)'" onmouseout="this.style.background='transparent'">
+                        <i data-lucide="layers" style="width:14px;height:14px;color:var(--accent-primary);flex-shrink:0;"></i>
+                        <span style="font-weight:600;">All Sessions</span>
+                    </a>
+                    {% for session in all_sessions %}
+                    <a href="/api/records/download?session_id={{ session.session_id }}" class="export-dropdown-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);text-decoration:none;" onmouseover="this.style.background='var(--bg-input)'" onmouseout="this.style.background='transparent'">
+                        <i data-lucide="calendar-clock" style="width:14px;height:14px;color:var(--text-muted);flex-shrink:0;"></i>
+                        <div style="overflow:hidden;">
+                            <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ session.subject or 'Untitled Session' }}</div>
+                            <div style="font-size:11px;color:var(--text-muted);">{{ session.session_id }} · {{ session.created_at|fmt_dt }}</div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                    {% if not all_sessions %}
+                    <div style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px;">No sessions yet</div>
+                    {% endif %}
+                </div>
+            </div>
             <button class="btn btn-sm btn-danger" onclick="resetRecords()" id="btn-reset-records">
                 <i data-lucide="refresh-ccw"></i>
                 Reset
@@ -282,16 +304,17 @@
         }
     }
 
-    function updateDownloadLink() {
-        const form = document.getElementById('filterForm');
-        if (!form) return;
-        const params = new URLSearchParams(new FormData(form)).toString();
-        const dlBtn = document.getElementById('btn-download-records');
-        if (dlBtn) dlBtn.href = '/api/records/download?' + params;
+    function toggleExportDropdown() {
+        const dd = document.getElementById('export-dropdown');
+        dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
     }
 
-    document.addEventListener('DOMContentLoaded', updateDownloadLink);
-    document.getElementById('filterForm').addEventListener('change', updateDownloadLink);
+    document.addEventListener('click', function(e) {
+        const wrap = document.getElementById('export-dropdown-wrap');
+        if (wrap && !wrap.contains(e.target)) {
+            document.getElementById('export-dropdown').style.display = 'none';
+        }
+    });
 
     lucide.createIcons();
 </script>

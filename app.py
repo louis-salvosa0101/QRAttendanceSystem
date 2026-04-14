@@ -1058,12 +1058,20 @@ def api_download_records():
         date_to=date_to or None
     )
 
+    # Build session_id -> session name lookup
+    all_sessions_list = get_all_sessions()
+    session_name_map = {}
+    for s in all_sessions_list:
+        sid = s.get('session_id', '')
+        label = s.get('subject') or sid
+        session_name_map[sid] = label
+
     if not records:
         from openpyxl import Workbook
         wb = Workbook()
         ws = wb.active
         ws.title = "Records"
-        ws.append(['Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session ID', 'Status', 'Fine', 'Fine Reason'])
+        ws.append(['Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session', 'Status', 'Fine', 'Fine Reason'])
         out = io.BytesIO()
         wb.save(out)
         out.seek(0)
@@ -1078,7 +1086,7 @@ def api_download_records():
     ws = wb.active
     ws.title = "Filtered Records"
 
-    headers = ['Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session ID', 'Status', 'Fine', 'Fine Reason']
+    headers = ['Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session', 'Status', 'Fine', 'Fine Reason']
     ws.append(headers)
 
     header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
@@ -1099,7 +1107,7 @@ def api_download_records():
             r['course'],
             r['year'],
             r['section'],
-            r['session_id'],
+            session_name_map.get(r['session_id'], r['session_id']),
             r['status'],
             fine_val,
             r.get('fine_reason', '')
@@ -1224,7 +1232,9 @@ def api_download_records():
 
     filename = "attendance_export.xlsx"
     if session_id:
-        filename = f"session_{session_id}_records.xlsx"
+        safe_name = session_name_map.get(session_id, session_id)
+        safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in safe_name).strip()
+        filename = f"{safe_name}_records.xlsx"
 
     return send_file(
         out,
