@@ -165,21 +165,20 @@
             {% for session in active_sessions %}
             <div class="session-card" id="session-{{ session.session_id }}">
                 <div class="session-header">
-                    <div class="session-id">{{ session.session_id }}</div>
+                    <div>
+                        <div class="session-id">{{ session.subject or 'Untitled Session' }}</div>
+                        <div style="font-size:11px;color:var(--text-muted);font-family:'Inter',monospace;margin-top:2px;">{{ session.session_id }}</div>
+                    </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;">
                         <span class="badge badge-success">Active</span>
                         <button class="btn btn-sm btn-danger"
-                                onclick="endSession('{{ session.session_id }}', {{ session.fine_absent or 50 }}, {{ session.fine_partial or 25 }})"
+                                onclick="endSession('{{ session.session_id }}', '{{ session.subject|e }}', {{ session.fine_absent or 50 }}, {{ session.fine_partial or 25 }})"
                                 id="btn-close-{{ session.session_id }}">
                             <i data-lucide="x"></i> Close
                         </button>
                     </div>
                 </div>
                 <div class="session-meta">
-                    <div class="session-meta-item">
-                        <div class="session-meta-label">Subject</div>
-                        <div class="session-meta-value">{{ session.subject or '—' }}</div>
-                    </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Teacher</div>
                         <div class="session-meta-value">{{ session.teacher or '—' }}</div>
@@ -279,8 +278,7 @@
             <table id="sessionHistoryTable">
                 <thead>
                     <tr>
-                        <th>Session ID</th>
-                        <th>Subject</th>
+                        <th>Session</th>
                         <th>Teacher</th>
                         <th>Required</th>
                         <th>Start</th>
@@ -293,10 +291,10 @@
                 <tbody>
                     {% for session in all_sessions|reverse %}
                     <tr data-status="{{ 'active' if session.is_active else 'closed' }}">
-                        <td style="font-family:'Inter',monospace;font-weight:600;color:var(--accent-primary);font-size:12px;">
-                            {{ session.session_id }}
+                        <td>
+                            <div style="font-weight:600;color:var(--text-primary);">{{ session.subject or 'Untitled Session' }}</div>
+                            <div style="font-size:11px;color:var(--text-muted);font-family:'Inter',monospace;">{{ session.session_id }}</div>
                         </td>
-                        <td>{{ session.subject or '—' }}</td>
                         <td>{{ session.teacher or '—' }}</td>
                         <td style="font-size:11px;color:var(--text-muted);">
                             {% if session.required_course %}{{ session.required_course }}{% endif %}
@@ -321,7 +319,7 @@
                             {% endif %}
                         </td>
                         <td style="text-align:center;">
-                            <button class="btn btn-sm btn-danger" onclick="deleteSession('{{ session.session_id }}')" title="Delete session" style="padding:4px 8px;min-width:unset;">
+                            <button class="btn btn-sm btn-danger" onclick="deleteSession('{{ session.session_id }}', '{{ session.subject|e }}')" title="Delete session" style="padding:4px 8px;min-width:unset;">
                                 <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
                             </button>
                         </td>
@@ -394,7 +392,8 @@
             });
 
             if (result.success) {
-                showToast(`Session ${result.session.session_id} created!`, 'success');
+                const name = result.session.subject || result.session.session_id;
+                showToast(`Session "${name}" created!`, 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
                 showToast('Failed to create session.', 'error');
@@ -404,10 +403,11 @@
         }
     }
 
-    async function endSession(sessionId, fineAbsent, finePartial) {
+    async function endSession(sessionId, sessionName, fineAbsent, finePartial) {
+        const label = sessionName || sessionId;
         fineAbsent = fineAbsent || 50;
         finePartial = finePartial || 25;
-        if (!confirm(`Close session ${sessionId}?\n\nAbsent students: ₱${fineAbsent} fine\nPartial scans: ₱${finePartial} fine\n\nProceed?`)) return;
+        if (!confirm(`Close "${label}"?\n\nAbsent students: ₱${fineAbsent} fine\nPartial scans: ₱${finePartial} fine\n\nProceed?`)) return;
 
         try {
             const btn = document.getElementById(`btn-close-${sessionId}`);
@@ -415,7 +415,7 @@
 
             const result = await apiCall(`/api/session/${sessionId}/close`, 'POST');
             if (result.success) {
-                let msg = `Session ${sessionId} closed.`;
+                let msg = `"${label}" closed.`;
                 if (result.absent_logged > 0) msg += ` ${result.absent_logged} absent.`;
                 if (result.partial_updated > 0) msg += ` ${result.partial_updated} partial.`;
                 showToast(msg, 'success');
@@ -429,14 +429,15 @@
         }
     }
 
-    async function deleteSession(sessionId) {
-        if (!confirm(`Delete session ${sessionId}? This will also remove all its scan records.`)) return;
+    async function deleteSession(sessionId, sessionName) {
+        const label = sessionName || sessionId;
+        if (!confirm(`Delete "${label}"? This will also remove all its scan records.`)) return;
 
         try {
             const response = await fetch(`/api/session/${sessionId}`, { method: 'DELETE' });
             const result = await response.json();
             if (result.success) {
-                showToast(result.message, 'success');
+                showToast(`"${label}" deleted.`, 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
                 showToast(result.message || 'Failed to delete session.', 'error');
