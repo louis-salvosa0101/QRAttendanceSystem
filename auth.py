@@ -37,7 +37,12 @@ class Officer(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    """Load an officer by their database ID."""
+    """Load an officer by their database ID, with Flask-session caching."""
+    from flask import session as flask_session
+    cached = flask_session.get('_officer_cache')
+    if cached and cached.get('id') == int(user_id):
+        return Officer(id=cached['id'], username=cached['username'],
+                       name=cached['name'], created_at=cached['created_at'])
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
@@ -46,6 +51,7 @@ def load_user(user_id):
         )
         row = cur.fetchone()
     if row:
+        flask_session['_officer_cache'] = dict(row)
         return Officer(id=row['id'], username=row['username'],
                        name=row['name'], created_at=row['created_at'])
     return None

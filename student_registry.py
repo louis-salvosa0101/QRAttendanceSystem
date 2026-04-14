@@ -55,16 +55,17 @@ def register_student(student_data: dict, conn=None) -> bool:
 
 def register_students_bulk(students: list) -> dict:
     """
-    Register multiple students at once.
+    Register multiple students at once using a single DB connection.
     Returns dict with 'added' and 'updated' counts.
     """
     counts = {'added': 0, 'updated': 0}
-    for student in students:
-        is_new = register_student(student)
-        if is_new:
-            counts['added'] += 1
-        else:
-            counts['updated'] += 1
+    with get_db() as conn:
+        for student in students:
+            is_new = register_student(student, conn=conn)
+            if is_new:
+                counts['added'] += 1
+            else:
+                counts['updated'] += 1
     return counts
 
 
@@ -94,21 +95,28 @@ def get_student(student_number: str) -> dict | None:
 def get_students_by_filter(course: str = None,
                             year: list = None, section: str = None) -> list:
     """
-    Return students matching optional filters.
+    Return students matching optional filters via SQL WHERE clause.
     Used to determine who should attend a session.
     `year` should be a list of year strings, e.g. ['1', '2']
     """
-    students = get_all_students()
-    result = []
-    for s in students:
-        if course and s.get('course') != course:
-            continue
-        if year and isinstance(year, list) and len(year) > 0 and s.get('year') not in year:
-            continue
-        if section and s.get('section') != section:
-            continue
-        result.append(s)
-    return result
+    conditions, params = [], []
+    if course:
+        conditions.append("course = %s")
+        params.append(course)
+    if year and isinstance(year, list) and len(year) > 0:
+        conditions.append("year = ANY(%s)")
+        params.append(year)
+    if section:
+        conditions.append("section = %s")
+        params.append(section)
+    where = " AND ".join(conditions) if conditions else "1=1"
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            f"SELECT student_number, name, course, year, section FROM students WHERE {where} ORDER BY student_number",
+            params,
+        )
+        return [dict(r) for r in cur.fetchall()]
 
 
 def update_student(student_number: str, name: str = None, course: str = None,
@@ -185,13 +193,14 @@ def clear_registry() -> int:
 
 
 def get_registry_stats() -> dict:
-    """Get summary statistics of the registry."""
-    students = get_all_students()
-    courses = {}
-    for s in students:
-        c = s.get('course') or 'Unknown'
-        courses[c] = courses.get(c, 0) + 1
-    return {
-        'total': len(students),
-        'by_course': courses,
-    }
+    """Get summary statistics of the registry using SQL aggregation."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT COUNT(*) AS total FROM students")
+        total = cur.fetchone()['total']
+        cur.execute(
+            "SELECT COALESCE(NULLIF(course, ''), 'Unknown') AS course, COUNT(*) AS cnt "
+            "FROM students GROUP BY COALESCE(NULLIF(course, ''), 'Unknown')"
+        )
+        by_course = {r['course']: r['cnt'] for r in cur.fetchall()}
+    return {'total': total, 'by_course': by_course}

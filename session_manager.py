@@ -58,6 +58,31 @@ def _load_scanned_students(conn, session_id: str) -> dict:
     return result
 
 
+def _batch_load_scans(cur, session_ids: list) -> dict:
+    """Batch-load scanned students for multiple sessions in a single query.
+    Returns {session_id: {student_number: {status, time_in, ...}}}."""
+    if not session_ids:
+        return {}
+    cur.execute(
+        """SELECT session_id, student_number, status, time_in, time_out, fine, fine_reason
+           FROM session_scans WHERE session_id = ANY(%s)""",
+        (session_ids,)
+    )
+    scans_map = {}
+    for r in cur.fetchall():
+        sid = r['session_id']
+        if sid not in scans_map:
+            scans_map[sid] = {}
+        scans_map[sid][r['student_number']] = {
+            'status': r['status'],
+            'time_in': r['time_in'],
+            'time_out': r['time_out'],
+            'fine': r['fine'] or 0,
+            'fine_reason': r['fine_reason'] or '',
+        }
+    return scans_map
+
+
 def create_session(subject: str = "", teacher: str = "", notes: str = "",
                    duration_hours: float = None,
                    required_course: str = "",
@@ -136,25 +161,17 @@ def get_session(session_id: str) -> dict | None:
 def get_active_sessions() -> list:
     """Get all currently active sessions, auto-expiring any that are past due."""
     now = ph_now()
-    expired_ids = []
 
     with get_db() as conn:
         cur = _cur(conn)
 
         cur.execute(
-            f"""SELECT {_SESSION_COLS}
-                FROM sessions WHERE is_active = 1 AND expires_at <= %s""",
+            """UPDATE sessions SET is_active = 0
+               WHERE is_active = 1 AND expires_at <= %s
+               RETURNING session_id""",
             (now.isoformat(),)
         )
-        expired_rows = cur.fetchall()
-        expired_ids = [r['session_id'] for r in expired_rows]
-
-        if expired_ids:
-            cur.execute(
-                """UPDATE sessions SET is_active = 0
-                   WHERE is_active = 1 AND expires_at <= %s""",
-                (now.isoformat(),)
-            )
+        expired_ids = [r['session_id'] for r in cur.fetchall()]
 
         cur.execute(
             f"""SELECT {_SESSION_COLS}
@@ -163,15 +180,13 @@ def get_active_sessions() -> list:
         )
         rows = cur.fetchall()
 
+        sids = [r['session_id'] for r in rows]
+        scans_map = _batch_load_scans(cur, sids)
+
     if expired_ids:
         _handle_auto_expired(expired_ids)
 
-    result = []
-    for row in rows:
-        session = get_session(row['session_id'])
-        if session:
-            result.append(session)
-    return result
+    return [_session_row_to_dict(r, scans_map.get(r['session_id'], {})) for r in rows]
 
 
 def _handle_auto_expired(session_ids: list):
@@ -222,12 +237,18 @@ def get_all_sessions() -> list:
         )
         rows = cur.fetchall()
 
-    result = []
-    for row in rows:
-        session = get_session(row['session_id'])
-        if session:
-            result.append(session)
-    return result
+        sids = [r['session_id'] for r in rows]
+        scans_map = _batch_load_scans(cur, sids)
+
+    return [_session_row_to_dict(r, scans_map.get(r['session_id'], {})) for r in rows]
+
+
+def get_session_count() -> int:
+    """Return total number of sessions (lightweight count)."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT COUNT(*) AS cnt FROM sessions")
+        return cur.fetchone()['cnt']
 
 
 def validate_session(session_id: str) -> tuple:

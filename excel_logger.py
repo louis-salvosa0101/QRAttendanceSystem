@@ -104,16 +104,19 @@ def log_absent_students(session_id: str, session_data: dict,
 
     with get_db() as conn:
         cur = _cur(conn)
+
+        all_student_numbers = [str(s.get('student_number', '')) for s in required_students]
+        cur.execute(
+            "SELECT DISTINCT student_number FROM attendance_records WHERE session_id = %s AND student_number = ANY(%s)",
+            (session_id, all_student_numbers),
+        )
+        already_logged = {r['student_number'] for r in cur.fetchall()}
+
         for student in required_students:
             student_number = str(student.get('student_number', ''))
             scan_info = scanned.get(student_number, {})
 
-            cur.execute(
-                """SELECT COUNT(*) AS cnt FROM attendance_records
-                   WHERE session_id = %s AND student_number = %s""",
-                (session_id, student_number)
-            )
-            if cur.fetchone()['cnt'] > 0 and not scan_info:
+            if student_number in already_logged and not scan_info:
                 continue
 
             if not scan_info:
@@ -297,33 +300,37 @@ def get_attendance_records(session_id: str = None, student_number: str = None,
 
 
 def get_session_stats(session_id: str) -> dict:
-    """Get attendance statistics for a specific session."""
+    """Get attendance statistics for a specific session using SQL aggregation."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("""
+            SELECT COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE status = 'Time In') AS time_in,
+                   COUNT(*) FILTER (WHERE status = 'Time Out') AS time_out,
+                   COUNT(*) FILTER (WHERE status = 'Absent') AS absent,
+                   COALESCE(SUM(fine), 0) AS total_fines
+            FROM attendance_records WHERE session_id = %s
+        """, (session_id,))
+        agg = cur.fetchone()
+
+        cur.execute("""
+            SELECT CONCAT(COALESCE(course,''), ' ', COALESCE(year,''), '-', COALESCE(section,'')) AS key,
+                   COUNT(*) AS cnt
+            FROM attendance_records WHERE session_id = %s
+            GROUP BY course, year, section
+        """, (session_id,))
+        by_course = {r['key']: r['cnt'] for r in cur.fetchall()}
+
     records = get_attendance_records(session_id=session_id)
-    courses = {}
-    time_in_count = 0
-    time_out_count = 0
-    absent_count = 0
-    total_fines = 0
-    for r in records:
-        key = f"{r.get('course', '')} {r.get('year', '')}-{r.get('section', '')}"
-        courses[key] = courses.get(key, 0) + 1
-        status = r.get('status', '')
-        if status == 'Time In':
-            time_in_count += 1
-        elif status == 'Time Out':
-            time_out_count += 1
-        elif status == 'Absent':
-            absent_count += 1
-        total_fines += r.get('fine') or 0
 
     return {
-        'total_present': len(records),
-        'time_in_count': time_in_count,
-        'time_out_count': time_out_count,
-        'absent_count': absent_count,
-        'total_fines': total_fines,
-        'by_course': courses,
-        'records': records
+        'total_present': agg['total'],
+        'time_in_count': agg['time_in'],
+        'time_out_count': agg['time_out'],
+        'absent_count': agg['absent'],
+        'total_fines': agg['total_fines'],
+        'by_course': by_course,
+        'records': records,
     }
 
 

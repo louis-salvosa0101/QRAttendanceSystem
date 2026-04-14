@@ -16,7 +16,7 @@ from config import (SECRET_KEY, QR_CODES_DIR, EXCEL_DIR, MASTER_LIST_DIR,
 from crypto_utils import decrypt_qr_data
 from qr_generator import generate_single_qr, batch_generate_from_excel
 from session_manager import (create_session, get_session, get_active_sessions,
-                              get_all_sessions, validate_session,
+                              get_all_sessions, get_session_count, validate_session,
                               record_student_scan, close_session, clear_all_sessions,
                               delete_session, process_scan, get_session_row)
 from db import get_db, _cur
@@ -34,10 +34,11 @@ from student_registry import (register_student, register_students_bulk,
 from db import init_db
 from auth import login_manager, authenticate, seed_default_admin, hash_password
 
-init_db()
-seed_default_admin()
-
 app = Flask(__name__)
+
+with app.app_context():
+    init_db()
+    seed_default_admin()
 
 
 @app.template_filter('fmt_dt')
@@ -144,11 +145,11 @@ def api_change_password():
 def index():
     """Dashboard / Home page."""
     active_sessions = get_active_sessions()
-    all_sessions = get_all_sessions()
+    total_sessions = get_session_count()
     registry_stats = get_registry_stats()
     return render_template('index.html',
                            active_sessions=active_sessions,
-                           total_sessions=len(all_sessions),
+                           total_sessions=total_sessions,
                            registry_stats=registry_stats)
 
 
