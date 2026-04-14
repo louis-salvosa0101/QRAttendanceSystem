@@ -3,13 +3,12 @@ Authentication module for the QR Attendance System.
 Provides Flask-Login integration with bcrypt password hashing.
 Only officers can log in -- students are excluded.
 """
-from datetime import datetime
-
 import bcrypt
 from flask import jsonify, request
 from flask_login import LoginManager, UserMixin
 
 from db import get_db, _cur
+from config import ph_now
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
@@ -91,7 +90,7 @@ def seed_default_admin():
 
         if count == 0:
             pw_hash = hash_password('admin123')
-            now = datetime.now().isoformat()
+            now = ph_now().isoformat()
             cur.execute(
                 """INSERT INTO officers (username, password_hash, name, created_at)
                    VALUES (%s, %s, %s, %s)""",

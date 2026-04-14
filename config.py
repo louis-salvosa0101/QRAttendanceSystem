@@ -4,8 +4,17 @@ Configuration settings for the QR Attendance System.
 import os
 import sys
 import base64
+from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
+
+# Philippines timezone (UTC+8) — used everywhere instead of datetime.now()
+PH_TZ = timezone(timedelta(hours=8))
+
+
+def ph_now() -> datetime:
+    """Return the current date/time in Asia/Manila as a naive datetime."""
+    return datetime.now(PH_TZ).replace(tzinfo=None)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))

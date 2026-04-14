@@ -8,7 +8,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from config import ATTENDANCE_LOG_FILE, EXCEL_DIR, FINE_ABSENT, FINE_PARTIAL, FINE_LATE
+from config import ATTENDANCE_LOG_FILE, EXCEL_DIR, FINE_ABSENT, FINE_PARTIAL, FINE_LATE, ph_now
 from db import get_db, _cur
 
 
@@ -49,7 +49,7 @@ def _style_header_row(ws, headers, widths):
 
 def _get_session_sheet_name(session_id: str) -> str:
     """Generate a sheet name for a session."""
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = ph_now().strftime('%Y-%m-%d')
     name = f"{today}_{session_id}"
     return name[:31]
 
@@ -60,7 +60,7 @@ def log_attendance(student_data: dict, session_id: str, status: str = "Present",
     Log a single attendance record to PostgreSQL.
     If *conn* is provided the caller's connection is reused (no new pool checkout).
     """
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    now = ph_now().strftime('%Y-%m-%d %H:%M:%S')
     values = (
         now,
         student_data.get('name', ''),
@@ -100,7 +100,7 @@ def log_absent_students(session_id: str, session_data: dict,
     s_fine_absent = session_data.get('fine_absent') or FINE_ABSENT
     s_fine_partial = session_data.get('fine_partial') or FINE_PARTIAL
     result = {'absent_logged': 0, 'partial_updated': 0}
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    now = ph_now().strftime('%Y-%m-%d %H:%M:%S')
 
     with get_db() as conn:
         cur = _cur(conn)

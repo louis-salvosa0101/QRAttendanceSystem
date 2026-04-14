@@ -12,7 +12,7 @@ from flask_login import login_required, login_user, logout_user, current_user
 from werkzeug.utils import secure_filename
 from config import (SECRET_KEY, QR_CODES_DIR, EXCEL_DIR, MASTER_LIST_DIR,
                     ATTENDANCE_LOG_FILE, FINE_LATE, FINE_ABSENT, FINE_PARTIAL,
-                    LATE_THRESHOLD_MINUTES)
+                    LATE_THRESHOLD_MINUTES, ph_now)
 from crypto_utils import decrypt_qr_data
 from qr_generator import generate_single_qr, batch_generate_from_excel
 from session_manager import (create_session, get_session, get_active_sessions,
@@ -42,12 +42,15 @@ app = Flask(__name__)
 
 @app.template_filter('fmt_dt')
 def fmt_dt_filter(value):
-    """Format an ISO-ish datetime string into 12-hour format like 'Apr 14, 2026 2:30 PM'."""
+    """Format an ISO-ish datetime string into 12-hour PH time like 'Apr 14, 2026 2:30 PM'."""
     if not value:
         return '—'
     try:
+        from config import PH_TZ
         raw = str(value).replace('Z', '+00:00')
         dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(PH_TZ).replace(tzinfo=None)
         hour = dt.hour % 12 or 12
         return f"{dt.strftime('%b')} {dt.day}, {dt.year} {hour}:{dt.strftime('%M %p')}"
     except (ValueError, TypeError):
@@ -483,7 +486,7 @@ def api_scan_qr():
                 'message': 'Session has been closed.'
             })
 
-        now = datetime.now()
+        now = ph_now()
         expires_at = datetime.fromisoformat(session['expires_at'])
         if now >= expires_at:
             _cur(conn).execute(
@@ -776,7 +779,7 @@ def api_add_manual_fine(student_number):
     if not reason:
         return jsonify({'success': False, 'message': 'A reason is required.'}), 400
 
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    now = ph_now().strftime('%Y-%m-%d %H:%M:%S')
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
@@ -842,7 +845,7 @@ def api_add_payment(student_number):
     if not amount or not isinstance(amount, (int, float)) or amount <= 0:
         return jsonify({'success': False, 'message': 'A valid positive amount is required.'}), 400
 
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    now = ph_now().strftime('%Y-%m-%d %H:%M:%S')
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(

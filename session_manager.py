@@ -9,7 +9,7 @@ import string
 from datetime import datetime, timedelta
 
 from config import (SESSION_DURATION_HOURS, FINE_LATE, FINE_ABSENT,
-                    FINE_PARTIAL, LATE_THRESHOLD_MINUTES)
+                    FINE_PARTIAL, LATE_THRESHOLD_MINUTES, ph_now)
 from db import get_db, _cur
 
 _SESSION_COLS = """session_id, subject, teacher, notes, created_at, expires_at,
@@ -86,11 +86,14 @@ def create_session(subject: str = "", teacher: str = "", notes: str = "",
     token_chars = string.ascii_uppercase + string.digits
     session_id = ''.join(secrets.choice(token_chars) for _ in range(8))
 
-    now = datetime.now()
+    now = ph_now()
     if scheduled_start:
         try:
             start_dt = datetime.fromisoformat(
                 scheduled_start.replace('Z', '+00:00'))
+            if start_dt.tzinfo is not None:
+                from config import PH_TZ
+                start_dt = start_dt.astimezone(PH_TZ).replace(tzinfo=None)
         except (ValueError, TypeError):
             start_dt = now
     else:
@@ -132,7 +135,7 @@ def get_session(session_id: str) -> dict | None:
 
 def get_active_sessions() -> list:
     """Get all currently active sessions, auto-expiring any that are past due."""
-    now = datetime.now()
+    now = ph_now()
     expired_ids = []
 
     with get_db() as conn:
@@ -239,7 +242,7 @@ def validate_session(session_id: str) -> tuple:
     if not session.get('is_active'):
         return False, "Session has been closed."
 
-    now = datetime.now()
+    now = ph_now()
     expires_at = datetime.fromisoformat(session['expires_at'])
     if now >= expires_at:
         with get_db() as conn:
@@ -264,7 +267,7 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
         return False, "Session not found.", None, 0, ''
 
     scanned = session.get('scanned_students', {})
-    now = datetime.now()
+    now = ph_now()
     now_iso = now.isoformat()
 
     if student_number not in scanned:
@@ -327,7 +330,7 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
     if not session.get('is_active'):
         return False, "Session has been closed.", None, 0, '', 0
 
-    now = datetime.now()
+    now = ph_now()
     expires_at = datetime.fromisoformat(session['expires_at'])
     if now >= expires_at:
         cur.execute(
