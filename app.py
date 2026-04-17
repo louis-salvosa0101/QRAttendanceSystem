@@ -265,11 +265,12 @@ def student_detail_page(student_number):
         if sess_id:
             sessions_set.add(sess_id)
         status = r.get('status', '')
+        time_out_val = (r.get('time_out') or '').strip()
         if status == 'Absent':
             absent_count += 1
-        elif status == 'Time In':
+        elif status == 'Time In' and not time_out_val:
             time_in_count += 1
-        elif status == 'Time Out':
+        elif status == 'Time Out' or time_out_val:
             time_out_count += 1
         if 'Partial' in status:
             partial_count += 1
@@ -566,13 +567,13 @@ def api_scan_qr():
         # 5. Log attendance record (reuses conn)
         log_success = log_attendance(student_data, session_id, status=status,
                                      fine=fine, fine_reason=fine_reason, conn=conn)
-
-    if not log_success:
-        return jsonify({
-            'success': False,
-            'error': 'log_error',
-            'message': 'Failed to log attendance.'
-        })
+        if not log_success:
+            conn.rollback()
+            return jsonify({
+                'success': False,
+                'error': 'log_error',
+                'message': 'Failed to log attendance.'
+            })
 
     fine_msg = f' | Fine: ₱{fine} ({fine_reason})' if fine else ''
     return jsonify({
@@ -1289,7 +1290,9 @@ def api_student_fines_summary():
         status = r.get('status', '')
         if status == 'Absent':
             sd['absent'] += 1
-        elif status in ('Late', 'Partial (No Time Out)') or (status == 'Time In' and fine_val > 0):
+        elif status in ('Late', 'Partial (No Time Out)') or (
+            status in ('Time In', 'Time Out') and fine_val > 0
+        ):
             sd['late'] += 1
         else:
             sd['present'] += 1
@@ -1421,7 +1424,10 @@ def api_download_records():
         wb = Workbook()
         ws = wb.active
         ws.title = "Records"
-        ws.append(['Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session', 'Status', 'Fine', 'Fine Reason'])
+        ws.append([
+            'Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session',
+            'Time In', 'Time Out', 'Status', 'Fine', 'Fine Reason',
+        ])
         out = io.BytesIO()
         wb.save(out)
         out.seek(0)
@@ -1439,7 +1445,10 @@ def api_download_records():
     else:
         ws.title = 'Records'
 
-    headers = ['Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session', 'Status', 'Fine', 'Fine Reason']
+    headers = [
+        'Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session',
+        'Time In', 'Time Out', 'Status', 'Fine', 'Fine Reason',
+    ]
     ws.append(headers)
 
     header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
@@ -1461,6 +1470,8 @@ def api_download_records():
             r['year'],
             r['section'],
             session_name_map.get(r['session_id'], r['session_id']),
+            r.get('time_in') or '',
+            r.get('time_out') or '',
             r['status'],
             fine_val,
             r.get('fine_reason', '')
@@ -1475,15 +1486,17 @@ def api_download_records():
         c = ws.cell(row=r, column=1, value=f'Session: {sess_label}')
         c.font = Font(bold=True, size=12)
         r += 1
-    ws.cell(row=r, column=8, value='Total rows (this export):').font = lbl
-    ws.cell(row=r, column=8).alignment = Alignment(horizontal='right')
-    ws.cell(row=r, column=9, value=len(records)).font = lbl
-    ws.cell(row=r, column=9).alignment = Alignment(horizontal='center')
+    footer_label_col = len(headers) - 1
+    footer_val_col = len(headers)
+    ws.cell(row=r, column=footer_label_col, value='Total rows (this export):').font = lbl
+    ws.cell(row=r, column=footer_label_col).alignment = Alignment(horizontal='right')
+    ws.cell(row=r, column=footer_val_col, value=len(records)).font = lbl
+    ws.cell(row=r, column=footer_val_col).alignment = Alignment(horizontal='center')
     r += 1
-    ws.cell(row=r, column=8, value='Total fines (PHP):').font = lbl
-    ws.cell(row=r, column=8).alignment = Alignment(horizontal='right')
-    ws.cell(row=r, column=9, value=total_fines).font = val
-    ws.cell(row=r, column=9).alignment = Alignment(horizontal='center')
+    ws.cell(row=r, column=footer_label_col, value='Total fines (PHP):').font = lbl
+    ws.cell(row=r, column=footer_label_col).alignment = Alignment(horizontal='right')
+    ws.cell(row=r, column=footer_val_col, value=total_fines).font = val
+    ws.cell(row=r, column=footer_val_col).alignment = Alignment(horizontal='center')
 
     out = io.BytesIO()
     wb.save(out)

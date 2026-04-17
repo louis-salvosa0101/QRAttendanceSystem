@@ -149,8 +149,8 @@ def migrate_attendance():
                         conn.execute(
                             """INSERT INTO attendance_records
                                (recorded_at, name, student_number, course, year, section,
-                                session_id, status, fine, fine_reason)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                session_id, status, fine, fine_reason, time_in, time_out)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (
                                 str(row[0]) if row[0] else datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                 row[1] or '',
@@ -162,6 +162,8 @@ def migrate_attendance():
                                 row[7] or 'Present',
                                 row[8] if len(row) > 8 and row[8] is not None else 0,
                                 row[9] if len(row) > 9 else '',
+                                row[10] if len(row) > 10 else None,
+                                row[11] if len(row) > 11 else None,
                             ),
                         )
                         count += 1

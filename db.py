@@ -141,6 +141,20 @@ def init_db():
             cur.execute("CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance_records(student_number)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_attendance_recorded ON attendance_records(recorded_at)")
 
+            for col, defn in [('time_in', 'TEXT'), ('time_out', 'TEXT')]:
+                cur.execute(
+                    f"ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS {col} {defn}"
+                )
+            # Legacy rows: infer scan times from recorded_at when dedicated columns were empty
+            cur.execute("""
+                UPDATE attendance_records SET time_in = recorded_at
+                WHERE time_in IS NULL AND status = 'Time In'
+            """)
+            cur.execute("""
+                UPDATE attendance_records SET time_out = recorded_at
+                WHERE time_out IS NULL AND status = 'Time Out'
+            """)
+
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS officers (
                     id SERIAL PRIMARY KEY,

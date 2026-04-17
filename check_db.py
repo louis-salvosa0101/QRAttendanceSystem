@@ -232,9 +232,20 @@ else:
 section("5. Attendance records")
 student_data = {"name": "Alice Updated", "student_number": "S001", "course": "BSCS", "year": "2", "section": "A"}
 if log_attendance(student_data, sid, "Time In", 0, ""):
-    ok("log_attendance")
+    ok("log_attendance Time In")
 else:
-    fail("log_attendance")
+    fail("log_attendance Time In")
+
+if log_attendance(student_data, sid, "Time Out", 0, ""):
+    ok("log_attendance Time Out")
+else:
+    fail("log_attendance Time Out")
+
+s001_rows = [r for r in get_attendance_records(session_id=sid) if r.get("student_number") == "S001"]
+if len(s001_rows) == 1 and (s001_rows[0].get("time_out") or "").strip():
+    ok("attendance_records single row after Time In + Time Out")
+else:
+    fail("single-row attendance", str(s001_rows))
 
 records = get_attendance_records(session_id=sid)
 if records and len(records) >= 1 and records[0].get("datetime") and records[0].get("session_id") == sid:

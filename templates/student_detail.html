@@ -382,8 +382,10 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Date & Time</th>
+                        <th>Logged at</th>
                         <th>Session</th>
+                        <th>Time In</th>
+                        <th>Time Out</th>
                         <th>Status</th>
                         <th>Fine</th>
                         <th>Reason</th>
@@ -395,6 +397,8 @@
                     <tr data-attendance-fine-row="{{ r.id }}">
                         <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.datetime|fmt_dt }}</td>
                         <td><span class="badge badge-info" style="font-size:10px;">{{ r.session_id }}</span></td>
+                        <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.time_in|fmt_dt }}</td>
+                        <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.time_out|fmt_dt }}</td>
                         <td>
                             {% if r.status == 'Time In' %}<span class="badge badge-success">In</span>
                             {% elif r.status == 'Time Out' %}<span class="badge badge-info">Out</span>

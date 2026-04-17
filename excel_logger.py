@@ -29,9 +29,9 @@ THIN_BORDER = Border(
 
 ATTENDANCE_HEADERS = [
     'Date & Time', 'Student Name', 'Student Number', 'Course', 'Year', 'Section',
-    'Session ID', 'Status', 'Fine (PHP)', 'Fine Reason'
+    'Session ID', 'Time In', 'Time Out', 'Status', 'Fine (PHP)', 'Fine Reason',
 ]
-COLUMN_WIDTHS = [22, 30, 20, 15, 8, 10, 15, 15, 12, 40]
+COLUMN_WIDTHS = [22, 30, 20, 15, 8, 10, 15, 18, 18, 15, 12, 40]
 
 
 def _style_header_row(ws, headers, widths):
@@ -57,32 +57,51 @@ def _get_session_sheet_name(session_id: str) -> str:
 def log_attendance(student_data: dict, session_id: str, status: str = "Present",
                    fine: int = 0, fine_reason: str = '', conn=None) -> bool:
     """
-    Log a single attendance record to PostgreSQL.
+    Log attendance to PostgreSQL: Time In inserts one row; Time Out updates that row.
     If *conn* is provided the caller's connection is reused (no new pool checkout).
     """
     now = ph_now().strftime('%Y-%m-%d %H:%M:%S')
-    values = (
-        now,
-        student_data.get('name', ''),
-        student_data.get('student_number', ''),
-        student_data.get('course', ''),
-        student_data.get('year', ''),
-        student_data.get('section', ''),
-        session_id,
-        status,
-        fine or 0,
-        fine_reason or '',
-    )
-    sql = """INSERT INTO attendance_records
-             (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
-             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+    sn = student_data.get('student_number', '')
+
+    def _run(cur):
+        if status == 'Time Out':
+            cur.execute(
+                """UPDATE attendance_records
+                   SET time_out = %s, status = 'Time Out'
+                   WHERE session_id = %s AND student_number = %s
+                     AND status = 'Time In'
+                     AND (time_out IS NULL OR TRIM(COALESCE(time_out, '')) = '')""",
+                (now, session_id, sn),
+            )
+            return cur.rowcount > 0
+        time_in_val = now if status == 'Time In' else None
+        cur.execute(
+            """INSERT INTO attendance_records
+               (recorded_at, name, student_number, course, year, section, session_id,
+                status, fine, fine_reason, time_in, time_out)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (
+                now,
+                student_data.get('name', ''),
+                sn,
+                student_data.get('course', ''),
+                student_data.get('year', ''),
+                student_data.get('section', ''),
+                session_id,
+                status,
+                fine or 0,
+                fine_reason or '',
+                time_in_val,
+                None,
+            ),
+        )
+        return True
+
     try:
         if conn is not None:
-            _cur(conn).execute(sql, values)
-        else:
-            with get_db() as c:
-                _cur(c).execute(sql, values)
-        return True
+            return _run(_cur(conn))
+        with get_db() as c:
+            return _run(_cur(c))
     except Exception as e:
         print(f"Error logging attendance: {e}")
         return False
@@ -122,8 +141,9 @@ def log_absent_students(session_id: str, session_data: dict,
             if not scan_info:
                 cur.execute(
                     """INSERT INTO attendance_records
-                       (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, 'Absent', %s, %s)""",
+                       (recorded_at, name, student_number, course, year, section, session_id,
+                        status, fine, fine_reason, time_in, time_out)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, 'Absent', %s, %s, NULL, NULL)""",
                     (now, student.get('name', ''), student_number, student.get('course', ''),
                      student.get('year', ''), student.get('section', ''),
                      session_id, s_fine_absent, 'Absent - did not scan QR')
@@ -136,7 +156,8 @@ def log_absent_students(session_id: str, session_data: dict,
                 cur.execute(
                     """UPDATE attendance_records
                        SET status = 'Partial (No Time Out)', fine = %s, fine_reason = %s
-                       WHERE session_id = %s AND student_number = %s AND status = 'Time In'""",
+                       WHERE session_id = %s AND student_number = %s AND status = 'Time In'
+                         AND (time_out IS NULL OR TRIM(COALESCE(time_out, '')) = '')""",
                     (s_fine_partial, fine_reason, session_id, student_number)
                 )
                 if cur.rowcount > 0:
@@ -144,8 +165,9 @@ def log_absent_students(session_id: str, session_data: dict,
                 else:
                     cur.execute(
                         """INSERT INTO attendance_records
-                           (recorded_at, name, student_number, course, year, section, session_id, status, fine, fine_reason)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, 'Partial (No Time Out)', %s, %s)""",
+                           (recorded_at, name, student_number, course, year, section, session_id,
+                            status, fine, fine_reason, time_in, time_out)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, 'Partial (No Time Out)', %s, %s, NULL, NULL)""",
                         (now, student.get('name', ''), student_number, student.get('course', ''),
                          student.get('year', ''), student.get('section', ''),
                          session_id, s_fine_partial, fine_reason),
@@ -191,7 +213,7 @@ def generate_summary_sheet(filepath: str = None) -> bool:
         student_records[student_num]['total_fines'] += fine
         if r.get('status') == 'Absent':
             student_records[student_num]['absent_count'] += 1
-        elif r.get('status') in ('Late', 'Time In', 'Partial (No Time Out)') and fine:
+        elif r.get('status') in ('Late', 'Time In', 'Time Out', 'Partial (No Time Out)') and fine:
             student_records[student_num]['late_count'] += 1
 
     # Fetch manual fines and payments per student
@@ -289,7 +311,11 @@ def get_attendance_records(session_id: str = None, student_number: str = None,
         params.append(date_to + " 23:59:59")
 
     where = " AND ".join(conditions) if conditions else "1=1"
-    query = f"SELECT id, recorded_at as datetime, name, student_number, course, year, section, session_id, status, fine, fine_reason FROM attendance_records WHERE {where} ORDER BY recorded_at"
+    query = (
+        f"SELECT id, recorded_at as datetime, name, student_number, course, year, section, "
+        f"session_id, status, fine, fine_reason, time_in, time_out "
+        f"FROM attendance_records WHERE {where} ORDER BY recorded_at"
+    )
 
     with get_db() as conn:
         cur = _cur(conn)
@@ -305,8 +331,14 @@ def get_session_stats(session_id: str) -> dict:
         cur = _cur(conn)
         cur.execute("""
             SELECT COUNT(*) AS total,
-                   COUNT(*) FILTER (WHERE status = 'Time In') AS time_in,
-                   COUNT(*) FILTER (WHERE status = 'Time Out') AS time_out,
+                   COUNT(*) FILTER (
+                       WHERE status = 'Time In'
+                         AND (time_out IS NULL OR TRIM(COALESCE(time_out, '')) = '')
+                   ) AS time_in,
+                   COUNT(*) FILTER (
+                       WHERE (time_out IS NOT NULL AND TRIM(COALESCE(time_out, '')) != '')
+                          OR status = 'Time Out'
+                   ) AS time_out,
                    COUNT(*) FILTER (WHERE status = 'Absent') AS absent,
                    COALESCE(SUM(fine), 0) AS total_fines
             FROM attendance_records WHERE session_id = %s

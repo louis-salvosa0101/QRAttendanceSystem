@@ -188,12 +188,14 @@
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th>Date & Time</th>
+                                <th>Logged at</th>
                                 <th>Name</th>
                                 <th>Student #</th>
                                 <th>Course</th>
                                 <th>Yr</th>
                                 <th>Sec</th>
+                                <th>Time In</th>
+                                <th>Time Out</th>
                                 <th>Status</th>
                                 <th>Fine</th>
                                 <th>Reason</th>
@@ -203,6 +205,7 @@
                             {% for record in session_records %}
                             <tr class="{% if record.status == 'Absent' %}records-row-danger
                                 {% elif record.status == 'Late' or record.status == 'Partial (No Time Out)' %}records-row-warning
+                                {% elif record.status == 'Time Out' and record.fine %}records-row-success-fine
                                 {% elif record.status == 'Time Out' %}records-row-info
                                 {% elif record.status == 'Time In' and record.fine %}records-row-success-fine
                                 {% elif record.status == 'Time In' %}records-row-success
@@ -214,6 +217,8 @@
                                 <td>{{ record.course }}</td>
                                 <td>{{ record.year }}</td>
                                 <td>{{ record.section }}</td>
+                                <td style="font-family:'Inter',monospace;font-size:12px;white-space:nowrap;">{{ record.time_in|fmt_dt }}</td>
+                                <td style="font-family:'Inter',monospace;font-size:12px;white-space:nowrap;">{{ record.time_out|fmt_dt }}</td>
                                 <td>
                                     {% if record.status == 'Absent' %}
                                         <span class="records-badge records-badge-danger">Absent</span>
