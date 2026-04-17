@@ -1429,12 +1429,15 @@ def api_download_records():
                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
     from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import Font, Alignment, PatternFill
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Filtered Records"
+    if session_id:
+        stitle = session_name_map.get(session_id, session_id) or 'Records'
+        ws.title = (stitle[:31] if len(stitle) > 31 else stitle) or 'Records'
+    else:
+        ws.title = 'Records'
 
     headers = ['Date & Time', 'Name', 'Student Number', 'Course', 'Year', 'Section', 'Session', 'Status', 'Fine', 'Fine Reason']
     ws.append(headers)
@@ -1463,118 +1466,24 @@ def api_download_records():
             r.get('fine_reason', '')
         ])
 
-    total_row = len(records) + 2
     ws.append([])
-    total_row += 1
-    ws.cell(row=total_row, column=8, value='TOTAL FINES:').font = Font(bold=True, size=12)
-    ws.cell(row=total_row, column=8).alignment = Alignment(horizontal='right')
-    ws.cell(row=total_row, column=9, value=total_fines).font = Font(bold=True, size=12, color='C00000')
-    ws.cell(row=total_row, column=9).alignment = Alignment(horizontal='center')
-
-    summary_sheet = wb.create_sheet(title="Summary")
-    student_data = {}
-    for r in records:
-        sn = r['student_number']
-        if sn not in student_data:
-            student_data[sn] = {
-                'name': r['name'], 'student_number': sn,
-                'course': r['course'], 'year': r['year'], 'section': r['section'],
-                'total_fines': 0, 'absent': 0, 'late': 0, 'present': 0,
-            }
-        fine_val = r['fine'] if r['fine'] else 0
-        student_data[sn]['total_fines'] += fine_val
-        status = r.get('status', '')
-        if status == 'Absent':
-            student_data[sn]['absent'] += 1
-        elif status in ('Late', 'Partial (No Time Out)') or (status == 'Time In' and fine_val > 0):
-            student_data[sn]['late'] += 1
-        else:
-            student_data[sn]['present'] += 1
-
-    # Fetch manual fines and payments per student for the summary
-    all_student_numbers = list(student_data.keys())
-    manual_fines_map = {}
-    payments_map = {}
-    if all_student_numbers:
-        with get_db() as conn:
-            cur = _cur(conn)
-            cur.execute("SELECT student_number, SUM(amount) AS total FROM manual_fines GROUP BY student_number")
-            for row in cur.fetchall():
-                manual_fines_map[row['student_number']] = row['total'] or 0
-            cur.execute("SELECT student_number, SUM(amount) AS total FROM fine_payments GROUP BY student_number")
-            for row in cur.fetchall():
-                payments_map[row['student_number']] = row['total'] or 0
-
-    for sn, sd in student_data.items():
-        sd['manual_fines'] = manual_fines_map.get(sn, 0)
-        sd['total_paid'] = payments_map.get(sn, 0)
-        sd['grand_fines'] = sd['total_fines'] + sd['manual_fines']
-        sd['balance'] = max(0, sd['grand_fines'] - sd['total_paid'])
-
-    sum_headers = ['Name', 'Student Number', 'Course', 'Year', 'Section',
-                   'Present', 'Late', 'Absent', 'Attendance Fines (PHP)',
-                   'Manual Fines (PHP)', 'Total Fines (PHP)',
-                   'Total Paid (PHP)', 'Balance (PHP)']
-    summary_sheet.append(sum_headers)
-    sum_fill = PatternFill(start_color="2E75B6", end_color="2E75B6", fill_type="solid")
-    sum_font = Font(color="FFFFFF", bold=True)
-    for cell in summary_sheet[1]:
-        cell.fill = sum_fill
-        cell.font = sum_font
-        cell.alignment = Alignment(horizontal='center')
-
-    fine_fill = PatternFill(start_color="f8d7da", end_color="f8d7da", fill_type="solid")
-    fine_font = Font(bold=True, color='721c24')
-    paid_fill = PatternFill(start_color="d4edda", end_color="d4edda", fill_type="solid")
-    paid_font = Font(bold=True, color='155724')
-    balance_fill = PatternFill(start_color="fff3cd", end_color="fff3cd", fill_type="solid")
-    balance_font = Font(bold=True, color='856404')
-    for sd in sorted(student_data.values(), key=lambda x: x['name']):
-        summary_sheet.append([
-            sd['name'], sd['student_number'], sd['course'], sd['year'], sd['section'],
-            sd['present'], sd['late'], sd['absent'],
-            sd['total_fines'], sd['manual_fines'], sd['grand_fines'],
-            sd['total_paid'], sd['balance'],
-        ])
-        row_num = summary_sheet.max_row
-        # Highlight fines column
-        fines_cell = summary_sheet.cell(row=row_num, column=11)
-        if sd['grand_fines'] > 0:
-            fines_cell.fill = fine_fill
-            fines_cell.font = fine_font
-        # Highlight paid column
-        paid_cell = summary_sheet.cell(row=row_num, column=12)
-        if sd['total_paid'] > 0:
-            paid_cell.fill = paid_fill
-            paid_cell.font = paid_font
-        # Highlight balance column
-        balance_cell = summary_sheet.cell(row=row_num, column=13)
-        if sd['balance'] > 0:
-            balance_cell.fill = balance_fill
-            balance_cell.font = balance_font
-        elif sd['grand_fines'] > 0 and sd['balance'] == 0:
-            balance_cell.fill = paid_fill
-            balance_cell.font = paid_font
-            balance_cell.value = 'PAID'
-
-    grand_total_fines = sum(sd['grand_fines'] for sd in student_data.values())
-    grand_total_paid = sum(sd['total_paid'] for sd in student_data.values())
-    grand_balance = max(0, grand_total_fines - grand_total_paid)
-
-    grand_row = summary_sheet.max_row + 2
-    summary_sheet.cell(row=grand_row, column=10, value='GRAND TOTAL:').font = Font(bold=True, size=12)
-    summary_sheet.cell(row=grand_row, column=10).alignment = Alignment(horizontal='right')
-    summary_sheet.cell(row=grand_row, column=11, value=grand_total_fines).font = Font(bold=True, size=13, color='C00000')
-    summary_sheet.cell(row=grand_row, column=11).alignment = Alignment(horizontal='center')
-    summary_sheet.cell(row=grand_row, column=12, value=grand_total_paid).font = Font(bold=True, size=13, color='155724')
-    summary_sheet.cell(row=grand_row, column=12).alignment = Alignment(horizontal='center')
-    summary_sheet.cell(row=grand_row, column=13, value=grand_balance).font = Font(bold=True, size=13, color='856404')
-    summary_sheet.cell(row=grand_row, column=13).alignment = Alignment(horizontal='center')
-
-    sum_widths = [30, 20, 15, 8, 10, 10, 10, 10, 20, 18, 18, 18, 18]
-    for i, w in enumerate(sum_widths, 1):
-        col_letter = get_column_letter(i)
-        summary_sheet.column_dimensions[col_letter].width = w
+    r = ws.max_row + 1
+    lbl = Font(bold=True, size=12)
+    val = Font(bold=True, size=12, color='C00000')
+    if session_id:
+        sess_label = session_name_map.get(session_id, session_id)
+        c = ws.cell(row=r, column=1, value=f'Session: {sess_label}')
+        c.font = Font(bold=True, size=12)
+        r += 1
+    ws.cell(row=r, column=8, value='Total rows (this export):').font = lbl
+    ws.cell(row=r, column=8).alignment = Alignment(horizontal='right')
+    ws.cell(row=r, column=9, value=len(records)).font = lbl
+    ws.cell(row=r, column=9).alignment = Alignment(horizontal='center')
+    r += 1
+    ws.cell(row=r, column=8, value='Total fines (PHP):').font = lbl
+    ws.cell(row=r, column=8).alignment = Alignment(horizontal='right')
+    ws.cell(row=r, column=9, value=total_fines).font = val
+    ws.cell(row=r, column=9).alignment = Alignment(horizontal='center')
 
     out = io.BytesIO()
     wb.save(out)
