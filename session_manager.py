@@ -4,18 +4,48 @@ Each session has a unique ID, creation time, and expiration.
 Sessions are stored in PostgreSQL (Supabase) for ACID compliance and durability.
 """
 import json
+import math
 import secrets
 import string
 from datetime import datetime, timedelta
 
 from config import (SESSION_DURATION_HOURS, FINE_LATE, FINE_ABSENT,
-                    FINE_PARTIAL, LATE_THRESHOLD_MINUTES, ph_now)
+                    FINE_PARTIAL, LATE_THRESHOLD_MINUTES, ph_now,
+                    TIME_OUT_COOLDOWN_AFTER_TIME_IN_SECONDS)
 from db import get_db, _cur
 
 _SESSION_COLS = """session_id, subject, teacher, notes, created_at, expires_at,
                is_active, required_course, required_year, required_section,
                scheduled_start, fine_late, fine_absent, fine_partial,
                late_threshold_minutes"""
+
+
+def _cooldown_retry_after_seconds(now: datetime, time_in_iso, cooldown_sec: int) -> int | None:
+    """If Time Out is blocked by cooldown, return seconds to wait (>=1); else None."""
+    if cooldown_sec <= 0:
+        return None
+    if not time_in_iso:
+        return None
+    s = str(time_in_iso).strip()
+    if not s:
+        return None
+    try:
+        t_in = datetime.fromisoformat(s.replace('Z', '+00:00'))
+        if t_in.tzinfo is not None:
+            t_in = t_in.replace(tzinfo=None)
+    except ValueError:
+        return None
+    elapsed = (now - t_in).total_seconds()
+    if elapsed >= cooldown_sec:
+        return None
+    return max(1, int(math.ceil(cooldown_sec - elapsed)))
+
+
+def _cooldown_blocked_message(retry_after: int) -> str:
+    return (
+        f'Time Out is not available yet. Wait {retry_after} more second(s) after Time In '
+        'before scanning again.'
+    )
 
 
 def _session_row_to_dict(row, scanned_students: dict = None) -> dict:
@@ -281,11 +311,12 @@ def validate_session(session_id: str) -> tuple:
 def record_student_scan(session_id: str, student_number: str) -> tuple:
     """
     Record a student scan in the session with Time In / Time Out logic.
-    Returns (success, message, scan_type, fine_amount, fine_reason).
+    Returns (success, message, scan_type, fine_amount, fine_reason, retry_after_seconds).
+    On cooldown rejection, retry_after_seconds is the wait time; otherwise None.
     """
     session = get_session(session_id)
     if not session:
-        return False, "Session not found.", None, 0, ''
+        return False, "Session not found.", None, 0, '', None
 
     scanned = session.get('scanned_students', {})
     now = ph_now()
@@ -309,9 +340,16 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
                    VALUES (%s, %s, 'in', %s, NULL, %s, %s)""",
                 (session_id, student_number, now_iso, fine, fine_reason)
             )
-        return True, "Time In recorded.", 'time_in', fine, fine_reason
+        return True, "Time In recorded.", 'time_in', fine, fine_reason, None
 
     elif scanned[student_number]['status'] == 'in':
+        retry = _cooldown_retry_after_seconds(
+            now,
+            scanned[student_number].get('time_in'),
+            TIME_OUT_COOLDOWN_AFTER_TIME_IN_SECONDS,
+        )
+        if retry is not None:
+            return False, _cooldown_blocked_message(retry), None, 0, '', retry
         # Second scan -> Time Out (fine was already applied at Time In, don't charge again)
         with get_db() as conn:
             cur = _cur(conn)
@@ -320,10 +358,10 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
                    WHERE session_id = %s AND student_number = %s""",
                 (now_iso, session_id, student_number)
             )
-        return True, "Time Out recorded.", 'time_out', 0, ''
+        return True, "Time Out recorded.", 'time_out', 0, '', None
 
     else:
-        return False, "Student already timed in and timed out for this session.", None, 0, ''
+        return False, "Student already timed in and timed out for this session.", None, 0, '', None
 
 
 def process_scan(conn, session_id: str, student_number: str) -> tuple:
@@ -333,7 +371,8 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
     students.  Designed to be called inside an outer ``get_db()`` block so
     the caller can share the same connection for registration and logging.
 
-    Returns (success, message, scan_type, fine_amount, fine_reason, attendance_count).
+    Returns (success, message, scan_type, fine_amount, fine_reason, attendance_count,
+             retry_after_seconds). On cooldown rejection, retry_after_seconds is set; else None.
     """
     cur = _cur(conn)
 
@@ -344,12 +383,12 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
     )
     row = cur.fetchone()
     if not row:
-        return False, "Session not found.", None, 0, '', 0
+        return False, "Session not found.", None, 0, '', 0, None
 
     session = _session_row_to_dict(row)
 
     if not session.get('is_active'):
-        return False, "Session has been closed.", None, 0, '', 0
+        return False, "Session has been closed.", None, 0, '', 0, None
 
     now = ph_now()
     expires_at = datetime.fromisoformat(session['expires_at'])
@@ -359,7 +398,7 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
             (session_id,),
         )
         _handle_auto_expired([session_id])
-        return False, "Session has expired.", None, 0, '', 0
+        return False, "Session has expired.", None, 0, '', 0, None
 
     # 2. Check course / year / section requirements (returned to caller)
     #    We expose the session dict so the caller can do the filter check
@@ -368,7 +407,7 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
 
     # 3. Look up only THIS student's existing scan
     cur.execute(
-        """SELECT status, fine, fine_reason
+        """SELECT status, fine, fine_reason, time_in
            FROM session_scans WHERE session_id = %s AND student_number = %s""",
         (session_id, student_number),
     )
@@ -397,6 +436,13 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
         scan_type = 'time_in'
 
     elif existing['status'] == 'in':
+        retry = _cooldown_retry_after_seconds(
+            now,
+            existing.get('time_in'),
+            TIME_OUT_COOLDOWN_AFTER_TIME_IN_SECONDS,
+        )
+        if retry is not None:
+            return False, _cooldown_blocked_message(retry), None, 0, '', 0, retry
         # Second scan -> Time Out (fine already applied at Time In)
         cur.execute(
             """UPDATE session_scans SET status = 'out', time_out = %s
@@ -407,7 +453,7 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
 
     else:
         return (False, "Student already timed in and timed out for this session.",
-                None, 0, '', 0)
+                None, 0, '', 0, None)
 
     # 4. Cheap count instead of loading every row
     cur.execute(
@@ -417,7 +463,7 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
     attendance_count = cur.fetchone()['cnt']
 
     return True, ("Time In recorded." if scan_type == 'time_in' else "Time Out recorded."),\
-        scan_type, fine, fine_reason, attendance_count
+        scan_type, fine, fine_reason, attendance_count, None
 
 
 def get_session_row(conn, session_id: str) -> dict | None:

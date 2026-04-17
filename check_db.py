@@ -12,6 +12,9 @@ import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
+# Allow immediate Time In -> Time Out in automated checks (production default is 10s)
+os.environ['TIME_OUT_COOLDOWN_SECONDS'] = '0'
+
 import config
 config.DATABASE_PATH = os.path.join(config.EXCEL_DIR, "attendance_check.db")
 
@@ -197,19 +200,19 @@ else:
 # 4. Session scans (Time In / Time Out)
 # ---------------------------------------------------------------------------
 section("4. Session scans")
-succ, msg, scan_type, fine, reason = record_student_scan(sid, "S001")
+succ, msg, scan_type, fine, reason, _retry = record_student_scan(sid, "S001")
 if succ and scan_type == "time_in":
     ok("First scan -> Time In")
 else:
     fail("First scan", f"succ={succ}, scan_type={scan_type}")
 
-succ2, msg2, scan_type2, _, _ = record_student_scan(sid, "S001")
+succ2, msg2, scan_type2, _, _, _retry2 = record_student_scan(sid, "S001")
 if succ2 and scan_type2 == "time_out":
     ok("Second scan -> Time Out")
 else:
     fail("Second scan", f"succ={succ2}, scan_type={scan_type2}")
 
-succ3, msg3, scan_type3, _, _ = record_student_scan(sid, "S001")
+succ3, msg3, scan_type3, _, _, _retry3 = record_student_scan(sid, "S001")
 if not succ3 and scan_type3 is None and "already" in msg3.lower():
     ok("Third scan rejected (duplicate)")
 else:

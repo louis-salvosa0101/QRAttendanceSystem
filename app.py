@@ -551,16 +551,20 @@ def api_scan_qr():
         register_student(student_data, conn=conn)
 
         # 4. Validate + record scan + get count (reuses conn)
-        success, scan_msg, scan_type, fine, fine_reason, attendance_count = \
+        success, scan_msg, scan_type, fine, fine_reason, attendance_count, retry_after = \
             process_scan(conn, session_id, student_data['student_number'])
 
         if not success:
-            return jsonify({
+            err = 'cooldown' if retry_after is not None else 'duplicate'
+            body = {
                 'success': False,
-                'error': 'duplicate',
+                'error': err,
                 'message': f"{student_data['name']} ({student_data['student_number']}) - {scan_msg}",
-                'student': student_data
-            })
+                'student': student_data,
+            }
+            if retry_after is not None:
+                body['retry_after_seconds'] = retry_after
+            return jsonify(body)
 
         status = 'Time In' if scan_type == 'time_in' else 'Time Out'
 

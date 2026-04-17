@@ -688,6 +688,27 @@
             overflow: hidden;
             background: #000;
             aspect-ratio: 1;
+            min-height: 0;
+            min-width: 0;
+        }
+
+        /* html5-qrcode can size its video/canvas from stream dimensions and inflate the box; pin it to the frame */
+        .scanner-container #qr-reader {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .scanner-container #qr-reader video,
+        .scanner-container #qr-reader canvas {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+            object-fit: cover;
         }
 
         .scanner-container video {
@@ -703,6 +724,7 @@
             align-items: center;
             justify-content: center;
             pointer-events: none;
+            z-index: 2;
         }
 
         .scanner-frame {
@@ -787,6 +809,8 @@
             border-radius: var(--radius-md);
             margin-top: 16px;
             animation: slideIn 0.4s ease;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .scan-result.success {
@@ -823,6 +847,8 @@
             font-size: 13px;
             color: var(--text-primary);
             font-weight: 500;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         /* ─── QR GRID ─────────────────────────────────────────── */

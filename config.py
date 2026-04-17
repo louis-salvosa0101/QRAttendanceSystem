@@ -62,6 +62,11 @@ DATABASE_URL = os.environ.get('DATABASE_URL', '')
 # Session settings
 SESSION_DURATION_HOURS = 4  # How long a session remains valid
 
+# Minimum seconds after Time In before the same QR can record Time Out (0 = disabled via env)
+TIME_OUT_COOLDOWN_AFTER_TIME_IN_SECONDS = int(
+    os.environ.get('TIME_OUT_COOLDOWN_SECONDS', '10')
+)
+
 # Fine settings (in PHP Pesos)
 FINE_LATE = 25        # Fine for scanning 15+ minutes after session start
 FINE_ABSENT = 50      # Fine for not scanning at all

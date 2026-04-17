@@ -6,8 +6,10 @@
 <style>
     .scanner-layout {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        /* minmax(0,1fr) lets columns shrink so long scan messages / QR UI can't blow out the grid */
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 16px;
+        align-items: start;
     }
     @media (max-width: 900px) {
         .scanner-layout { grid-template-columns: 1fr; }
@@ -255,7 +257,7 @@
                 const pulseColor = result.fine > 0 ? 'rgba(245, 158, 11, 0.5)' : (isTimeOut ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.4)');
                 pulseSuccess(pulseColor);
             } else {
-                const errorType = (result.error === 'duplicate' || result.error === 'not_included') ? 'warning' : 'error';
+                const errorType = (result.error === 'duplicate' || result.error === 'not_included' || result.error === 'cooldown') ? 'warning' : 'error';
                 showToast(result.message, errorType === 'warning' ? 'warning' : 'error');
                 resultArea.innerHTML = buildScanResultCard(result.student || null, errorType, result.message);
                 if (result.student) addToFeed(result.student, false, result.message);
