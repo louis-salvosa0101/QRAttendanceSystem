@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Officers - QR Attendance System{% endblock %}
+{% block page_title %}Officers{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid mb-3" style="grid-template-columns:repeat(2,1fr);">
+    <div class="stat-card blue">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value">{{ officers|length }}</div>
+                <div class="stat-label">Registered Officers</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="shield"></i></div>
+        </div>
+    </div>
+    <div class="stat-card green">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+                <div class="stat-value">
+                    <i data-lucide="user-check" style="width:22px;height:22px;"></i>
+                </div>
+                <div class="stat-label">Logged in as {{ current_user.name }}</div>
+            </div>
+            <div class="stat-icon"><i data-lucide="log-in"></i></div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Officer (admin only) -->
+{% if current_user.is_admin %}
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="user-plus"></i>
+            Add Officer
+        </div>
+    </div>
+    <div class="card-body">
+        <form id="addOfficerForm" onsubmit="addOfficer(event)">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Full Name <span style="color:var(--accent-danger);">*</span></label>
+                    <input type="text" class="form-input" id="addName" placeholder="e.g., Juan Dela Cruz" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Username <span style="color:var(--accent-danger);">*</span></label>
+                    <input type="text" class="form-input" id="addUsername" placeholder="e.g., juan" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Password <span style="color:var(--accent-danger);">*</span></label>
+                    <input type="password" class="form-input" id="addPassword" placeholder="Min 6 characters" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirm Password <span style="color:var(--accent-danger);">*</span></label>
+                    <input type="password" class="form-input" id="addConfirmPassword" placeholder="Re-type password" required minlength="6">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary" id="btn-add-officer">
+                <i data-lucide="user-plus"></i>
+                Add Officer
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- Officers Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i data-lucide="list"></i>
+            Officer Accounts
+        </div>
+        <span class="badge badge-info">{{ officers|length }} officers</span>
+    </div>
+    <div class="card-body" style="padding:0;">
+        {% if officers %}
+        <div class="table-container">
+            <table id="officersTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Username</th>
+                        <th>Created</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for officer in officers %}
+                    <tr>
+                        <td style="color:var(--text-muted);font-size:12px;">{{ loop.index }}</td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <div style="width:30px;height:30px;border-radius:50%;background:var(--accent-glow);color:var(--accent-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;">
+                                    {{ officer.name[0]|upper }}
+                                </div>
+                                <span style="font-weight:600;">{{ officer.name }}</span>
+                                {% if officer.id == current_user.id %}
+                                    <span class="badge badge-success" style="font-size:9px;">You</span>
+                                {% endif %}
+                                {% if officer.is_admin %}
+                                    <span class="badge badge-warning" style="font-size:9px;">Admin</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td style="font-family:'Inter',monospace;font-size:12px;">{{ officer.username }}</td>
+                        <td style="font-size:12px;color:var(--text-muted);">{{ officer.created_at|fmt_dt }}</td>
+                        <td>
+                            <div style="display:flex;gap:4px;justify-content:flex-end;">
+                                {% if current_user.is_admin or officer.id == current_user.id %}
+                                <button class="btn btn-sm btn-outline" style="padding:4px 8px;"
+                                        onclick="openEditModal({{ officer.id }}, '{{ officer.name }}', '{{ officer.username }}')"
+                                        title="Edit">
+                                    <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+                                </button>
+                                {% endif %}
+                                {% if current_user.is_admin %}
+                                <button class="btn btn-sm btn-outline" style="padding:4px 8px;"
+                                        onclick="openResetPasswordModal({{ officer.id }}, '{{ officer.name }}')"
+                                        title="Reset password">
+                                    <i data-lucide="key-round" style="width:14px;height:14px;"></i>
+                                </button>
+                                {% endif %}
+                                {% if current_user.is_admin and officer.id != current_user.id %}
+                                <button class="btn btn-sm btn-danger" style="padding:4px 8px;"
+                                        onclick="deleteOfficer({{ officer.id }}, '{{ officer.name }}')"
+                                        title="Delete">
+                                    <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="empty-state">
+                <i data-lucide="shield-off"></i>
+                <h3>No Officers</h3>
+                <p>Add an officer account using the form above.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Edit Officer Modal -->
+<div class="modal-overlay" id="editOfficerModal">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-header">
+            <h3 class="modal-title"><i data-lucide="pencil" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;"></i>Edit Officer</h3>
+            <button class="modal-close" onclick="closeEditModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="editOfficerForm" onsubmit="submitEditOfficer(event)">
+                <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" class="form-input" id="editName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" class="form-input" id="editUsername" required>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="editSubmitBtn">
+                        <i data-lucide="check"></i>
+                        Save
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal-overlay" id="resetPasswordModal">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-header">
+            <h3 class="modal-title"><i data-lucide="key-round" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;"></i>Reset Password</h3>
+            <button class="modal-close" onclick="closeResetPasswordModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div style="padding:10px 14px;border-radius:var(--radius-sm);background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);color:var(--accent-warning);font-size:13px;margin-bottom:16px;">
+                Setting a new password for <strong id="resetOfficerName"></strong>
+            </div>
+            <form id="resetPasswordForm" onsubmit="submitResetPassword(event)">
+                <input type="hidden" id="resetId">
+                <div class="form-group">
+                    <label class="form-label">New Password</label>
+                    <input type="password" class="form-input" id="resetNewPassword" required minlength="6">
+                    <small style="color:var(--text-muted);font-size:11px;margin-top:4px;display:block;">Minimum 6 characters</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirm New Password</label>
+                    <input type="password" class="form-input" id="resetConfirmPassword" required minlength="6">
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="closeResetPasswordModal()">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="resetSubmitBtn">
+                        <i data-lucide="check"></i>
+                        Reset
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // ─── Add Officer ─────────────────────────────────────────────
+    async function addOfficer(e) {
+        e.preventDefault();
+        const name = document.getElementById('addName').value.trim();
+        const username = document.getElementById('addUsername').value.trim();
+        const password = document.getElementById('addPassword').value;
+        const confirmPassword = document.getElementById('addConfirmPassword').value;
+
+        if (password !== confirmPassword) {
+            showToast('Passwords do not match.', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('btn-add-officer');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Adding…';
+
+        try {
+            const result = await apiCall('/api/officers', 'POST', { name, username, password });
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch (err) {
+            showToast('Network error.', 'error');
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="user-plus"></i> Add Officer';
+        lucide.createIcons();
+    }
+
+    // ─── Edit Officer Modal ──────────────────────────────────────
+    function openEditModal(id, name, username) {
+        document.getElementById('editId').value = id;
+        document.getElementById('editName').value = name;
+        document.getElementById('editUsername').value = username;
+        document.getElementById('editOfficerModal').classList.add('active');
+        lucide.createIcons();
+        setTimeout(() => document.getElementById('editName').focus(), 200);
+    }
+
+    function closeEditModal() {
+        document.getElementById('editOfficerModal').classList.remove('active');
+    }
+
+    async function submitEditOfficer(e) {
+        e.preventDefault();
+        const id = document.getElementById('editId').value;
+        const name = document.getElementById('editName').value.trim();
+        const username = document.getElementById('editUsername').value.trim();
+
+        const btn = document.getElementById('editSubmitBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Saving…';
+
+        try {
+            const result = await apiCall(`/api/officers/${id}`, 'PUT', { name, username });
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch (err) {
+            showToast('Network error.', 'error');
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="check"></i> Save';
+        lucide.createIcons();
+    }
+
+    document.getElementById('editOfficerModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeEditModal();
+    });
+
+    // ─── Reset Password Modal ────────────────────────────────────
+    function openResetPasswordModal(id, name) {
+        document.getElementById('resetId').value = id;
+        document.getElementById('resetOfficerName').textContent = name;
+        document.getElementById('resetPasswordForm').reset();
+        document.getElementById('resetPasswordModal').classList.add('active');
+        lucide.createIcons();
+        setTimeout(() => document.getElementById('resetNewPassword').focus(), 200);
+    }
+
+    function closeResetPasswordModal() {
+        document.getElementById('resetPasswordModal').classList.remove('active');
+    }
+
+    async function submitResetPassword(e) {
+        e.preventDefault();
+        const id = document.getElementById('resetId').value;
+        const newPassword = document.getElementById('resetNewPassword').value;
+        const confirmPassword = document.getElementById('resetConfirmPassword').value;
+
+        if (newPassword !== confirmPassword) {
+            showToast('Passwords do not match.', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('resetSubmitBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Resetting…';
+
+        try {
+            const result = await apiCall(`/api/officers/${id}/reset-password`, 'POST', { new_password: newPassword });
+            if (result.success) {
+                showToast(result.message, 'success');
+                closeResetPasswordModal();
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch (err) {
+            showToast('Network error.', 'error');
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="check"></i> Reset';
+        lucide.createIcons();
+    }
+
+    document.getElementById('resetPasswordModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeResetPasswordModal();
+    });
+
+    // ─── Delete Officer ──────────────────────────────────────────
+    async function deleteOfficer(id, name) {
+        if (!confirm(`Delete officer "${name}"? This cannot be undone.`)) return;
+        try {
+            const result = await apiCall(`/api/officers/${id}`, 'DELETE');
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch (err) {
+            showToast('Network error.', 'error');
+        }
+    }
+
+    lucide.createIcons();
+</script>
+{% endblock %}

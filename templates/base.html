@@ -16,7 +16,7 @@
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 
     <!-- Main stylesheet (cached by browser) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2">
 
 </head>
 <body>
@@ -67,6 +67,10 @@
                     <i data-lucide="users"></i>
                     Students
                 </a>
+                <a href="/officers" class="nav-link {% if request.endpoint == 'officers_page' %}active{% endif %}" id="nav-officers">
+                    <i data-lucide="shield"></i>
+                    Officers
+                </a>
             </div>
         </nav>
 
@@ -78,7 +82,7 @@
                 </div>
                 <div style="flex:1;min-width:0;">
                     <div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ current_user.name }}</div>
-                    <div style="font-size:11px;color:var(--text-muted);">Officer</div>
+                    <div style="font-size:11px;color:var(--text-muted);">{% if current_user.is_admin %}Administrator{% else %}Officer{% endif %}</div>
                 </div>
             </div>
             <div style="display:flex;gap:6px;">

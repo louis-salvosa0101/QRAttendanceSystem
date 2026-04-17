@@ -86,6 +86,8 @@ def login():
 
         officer = authenticate(username, password)
         if officer:
+            from flask import session as flask_session
+            flask_session.pop('_officer_cache', None)
             login_user(officer)
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
@@ -99,6 +101,8 @@ def login():
 @login_required
 def logout():
     """Log out the current officer."""
+    from flask import session as flask_session
+    flask_session.pop('_officer_cache', None)
     logout_user()
     return redirect(url_for('login'))
 
@@ -221,6 +225,17 @@ def students_page():
     students = get_all_students()
     stats = get_registry_stats()
     return render_template('students.html', students=students, stats=stats)
+
+
+@app.route('/officers')
+@login_required
+def officers_page():
+    """Officer account management page."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT id, username, name, created_at, is_admin FROM officers ORDER BY id")
+        officers = [dict(r) for r in cur.fetchall()]
+    return render_template('officers.html', officers=officers)
 
 
 @app.route('/students/<student_number>')
@@ -759,6 +774,124 @@ def api_clear_students():
     """Clear entire student registry."""
     count = clear_registry()
     return jsonify({'success': True, 'message': f'{count} students removed from registry.'})
+
+
+# ─── OFFICER MANAGEMENT API ─────────────────────────────────────────────
+
+@app.route('/api/officers', methods=['POST'])
+@login_required
+def api_create_officer():
+    """Create a new officer account (admin only)."""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Only administrators can add officers.'}), 403
+
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    username = (data.get('username') or '').strip()
+    password = data.get('password', '')
+
+    if not name or not username or not password:
+        return jsonify({'success': False, 'message': 'Name, username, and password are required.'}), 400
+    if len(password) < 6:
+        return jsonify({'success': False, 'message': 'Password must be at least 6 characters.'}), 400
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT 1 FROM officers WHERE username = %s", (username,))
+        if cur.fetchone():
+            return jsonify({'success': False, 'message': f'Username "{username}" is already taken.'}), 409
+
+        pw_hash = hash_password(password)
+        now = ph_now().isoformat()
+        cur.execute(
+            "INSERT INTO officers (username, password_hash, name, created_at) VALUES (%s, %s, %s, %s)",
+            (username, pw_hash, name, now),
+        )
+
+    return jsonify({'success': True, 'message': f'Officer "{name}" created successfully.'})
+
+
+@app.route('/api/officers/<int:officer_id>', methods=['PUT'])
+@login_required
+def api_update_officer(officer_id):
+    """Update an officer's name and/or username.
+    Admins can edit anyone; regular officers can only edit themselves."""
+    if not current_user.is_admin and officer_id != current_user.id:
+        return jsonify({'success': False, 'message': 'You can only edit your own account.'}), 403
+
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    username = (data.get('username') or '').strip()
+
+    if not name or not username:
+        return jsonify({'success': False, 'message': 'Name and username are required.'}), 400
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT id FROM officers WHERE id = %s", (officer_id,))
+        if not cur.fetchone():
+            return jsonify({'success': False, 'message': 'Officer not found.'}), 404
+
+        cur.execute(
+            "SELECT 1 FROM officers WHERE username = %s AND id != %s",
+            (username, officer_id),
+        )
+        if cur.fetchone():
+            return jsonify({'success': False, 'message': f'Username "{username}" is already taken.'}), 409
+
+        cur.execute(
+            "UPDATE officers SET name = %s, username = %s WHERE id = %s",
+            (name, username, officer_id),
+        )
+
+    if officer_id == current_user.id:
+        from flask import session as flask_session
+        flask_session.pop('_officer_cache', None)
+
+    return jsonify({'success': True, 'message': 'Officer updated successfully.'})
+
+
+@app.route('/api/officers/<int:officer_id>/reset-password', methods=['POST'])
+@login_required
+def api_reset_officer_password(officer_id):
+    """Reset another officer's password (admin only)."""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Only administrators can reset passwords.'}), 403
+
+    data = request.get_json() or {}
+    new_password = data.get('new_password', '')
+
+    if not new_password or len(new_password) < 6:
+        return jsonify({'success': False, 'message': 'Password must be at least 6 characters.'}), 400
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT id FROM officers WHERE id = %s", (officer_id,))
+        if not cur.fetchone():
+            return jsonify({'success': False, 'message': 'Officer not found.'}), 404
+
+        pw_hash = hash_password(new_password)
+        cur.execute("UPDATE officers SET password_hash = %s WHERE id = %s", (pw_hash, officer_id))
+
+    return jsonify({'success': True, 'message': 'Password reset successfully.'})
+
+
+@app.route('/api/officers/<int:officer_id>', methods=['DELETE'])
+@login_required
+def api_delete_officer(officer_id):
+    """Delete an officer account (admin only, cannot delete yourself)."""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Only administrators can delete officers.'}), 403
+    if officer_id == current_user.id:
+        return jsonify({'success': False, 'message': 'You cannot delete your own account.'}), 403
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("DELETE FROM officers WHERE id = %s", (officer_id,))
+        if cur.rowcount == 0:
+            return jsonify({'success': False, 'message': 'Officer not found.'}), 404
+
+    return jsonify({'success': True, 'message': 'Officer deleted successfully.'})
 
 
 # ─── FINES & PAYMENTS API ───────────────────────────────────────────────

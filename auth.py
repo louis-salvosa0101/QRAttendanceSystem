@@ -28,11 +28,12 @@ def unauthorized():
 class Officer(UserMixin):
     """Flask-Login compatible user model for officers."""
 
-    def __init__(self, id, username, name, created_at):
+    def __init__(self, id, username, name, created_at, is_admin=False):
         self.id = id
         self.username = username
         self.name = name
         self.created_at = created_at
+        self.is_admin = bool(is_admin)
 
 
 @login_manager.user_loader
@@ -42,18 +43,20 @@ def load_user(user_id):
     cached = flask_session.get('_officer_cache')
     if cached and cached.get('id') == int(user_id):
         return Officer(id=cached['id'], username=cached['username'],
-                       name=cached['name'], created_at=cached['created_at'])
+                       name=cached['name'], created_at=cached['created_at'],
+                       is_admin=cached.get('is_admin', 0))
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
-            "SELECT id, username, name, created_at FROM officers WHERE id = %s",
+            "SELECT id, username, name, created_at, is_admin FROM officers WHERE id = %s",
             (int(user_id),)
         )
         row = cur.fetchone()
     if row:
         flask_session['_officer_cache'] = dict(row)
         return Officer(id=row['id'], username=row['username'],
-                       name=row['name'], created_at=row['created_at'])
+                       name=row['name'], created_at=row['created_at'],
+                       is_admin=row.get('is_admin', 0))
     return None
 
 
@@ -65,7 +68,7 @@ def authenticate(username: str, password: str) -> Officer | None:
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
-            "SELECT id, username, password_hash, name, created_at FROM officers WHERE username = %s",
+            "SELECT id, username, password_hash, name, created_at, is_admin FROM officers WHERE username = %s",
             (username,)
         )
         row = cur.fetchone()
@@ -75,7 +78,8 @@ def authenticate(username: str, password: str) -> Officer | None:
 
     if bcrypt.checkpw(password.encode('utf-8'), row['password_hash'].encode('utf-8')):
         return Officer(id=row['id'], username=row['username'],
-                       name=row['name'], created_at=row['created_at'])
+                       name=row['name'], created_at=row['created_at'],
+                       is_admin=row.get('is_admin', 0))
     return None
 
 
@@ -88,6 +92,7 @@ def seed_default_admin():
     """
     Create the default admin officer if no officers exist.
     Default credentials: admin / admin123
+    Also ensures at least one officer has is_admin = 1.
     """
     with get_db() as conn:
         cur = _cur(conn)
@@ -98,8 +103,8 @@ def seed_default_admin():
             pw_hash = hash_password('admin123')
             now = ph_now().isoformat()
             cur.execute(
-                """INSERT INTO officers (username, password_hash, name, created_at)
-                   VALUES (%s, %s, %s, %s)""",
+                """INSERT INTO officers (username, password_hash, name, created_at, is_admin)
+                   VALUES (%s, %s, %s, %s, 1)""",
                 ('admin', pw_hash, 'Administrator', now)
             )
             print("\n" + "*" * 60)
@@ -108,3 +113,9 @@ def seed_default_admin():
             print("  Password: admin123")
             print("  ** CHANGE THIS PASSWORD AFTER FIRST LOGIN **")
             print("*" * 60 + "\n")
+        else:
+            cur.execute("SELECT COUNT(*) AS cnt FROM officers WHERE is_admin = 1")
+            if cur.fetchone()['cnt'] == 0:
+                cur.execute(
+                    "UPDATE officers SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM officers)"
+                )

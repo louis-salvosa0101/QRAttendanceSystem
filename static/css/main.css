@@ -201,6 +201,7 @@
         .sidebar-footer {
             padding: 16px;
             border-top: 1px solid var(--border);
+            flex-shrink: 0;
         }
 
         .sidebar-footer p {
@@ -1170,6 +1171,16 @@
         /* ─── RESPONSIVE: Mobile (< 768px) ───────────────────── */
         @media (max-width: 768px) {
             .bottom-nav { display: block; }
+
+            .sidebar {
+                z-index: 110;
+                height: 100vh;
+                height: 100dvh;
+            }
+
+            .sidebar-footer {
+                padding-bottom: calc(16px + var(--bottomnav-height) + env(safe-area-inset-bottom, 0px));
+            }
 
             .main-content {
                 padding-bottom: calc(var(--bottomnav-height) + env(safe-area-inset-bottom, 0px));

@@ -147,9 +147,13 @@ def init_db():
                     username TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
                     name TEXT NOT NULL,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    is_admin INTEGER DEFAULT 0
                 )
             """)
+            cur.execute(
+                "ALTER TABLE officers ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0"
+            )
             cur.execute("CREATE INDEX IF NOT EXISTS idx_officers_username ON officers(username)")
 
             cur.execute("""
