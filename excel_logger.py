@@ -289,7 +289,7 @@ def get_attendance_records(session_id: str = None, student_number: str = None,
         params.append(date_to + " 23:59:59")
 
     where = " AND ".join(conditions) if conditions else "1=1"
-    query = f"SELECT recorded_at as datetime, name, student_number, course, year, section, session_id, status, fine, fine_reason FROM attendance_records WHERE {where} ORDER BY recorded_at"
+    query = f"SELECT id, recorded_at as datetime, name, student_number, course, year, section, session_id, status, fine, fine_reason FROM attendance_records WHERE {where} ORDER BY recorded_at"
 
     with get_db() as conn:
         cur = _cur(conn)

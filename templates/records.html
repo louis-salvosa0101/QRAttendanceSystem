@@ -258,15 +258,36 @@
 {% block scripts %}
 <script>
     async function generateSummary() {
+        const btn = document.getElementById('btn-generate-summary');
+        if (btn) { btn.disabled = true; }
         try {
-            const result = await apiCall('/api/records/summary', 'POST');
-            if (result.success) {
-                showToast('Summary generated! Download the Excel file to view.', 'success');
-            } else {
-                showToast(result.message || 'Failed to generate summary.', 'error');
+            const response = await fetch('/api/records/student-fines-summary', {
+                method: 'GET',
+                credentials: 'same-origin',
+            });
+            if (!response.ok) {
+                let msg = 'Failed to export summary.';
+                try {
+                    const err = await response.json();
+                    if (err.message) msg = err.message;
+                } catch (_) {}
+                showToast(msg, 'error');
+                return;
             }
-        } catch(e) {
-            showToast('Error generating summary.', 'error');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'student_fines_summary.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            showToast('Summary downloaded.', 'success');
+        } catch (e) {
+            showToast('Error exporting summary.', 'error');
+        } finally {
+            if (btn) { btn.disabled = false; }
         }
     }
 

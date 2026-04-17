@@ -133,7 +133,7 @@
     <div class="stat-card amber">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
             <div>
-                <div class="stat-value" style="color:{% if summary.balance > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">
+                <div class="stat-value" id="stat-balance-value" style="color:{% if summary.balance > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">
                     ₱{{ summary.balance }}
                 </div>
                 <div class="stat-label">Balance</div>
@@ -144,7 +144,7 @@
     <div class="stat-card blue">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
             <div>
-                <div class="stat-value" style="color:var(--accent-success);">₱{{ summary.total_paid }}</div>
+                <div class="stat-value" id="stat-total-paid-value" style="color:var(--accent-success);">₱{{ summary.total_paid }}</div>
                 <div class="stat-label">Total Paid</div>
             </div>
             <div class="stat-icon"><i data-lucide="wallet"></i></div>
@@ -161,7 +161,7 @@
                 Attendance Fines
             </div>
             {% if fines_list %}
-            <span class="badge badge-danger">{{ fines_list|length }} · ₱{{ summary.attendance_fines }}</span>
+            <span class="badge badge-danger" id="badge-attendance-fines">{{ fines_list|length }} · ₱{{ summary.attendance_fines }}</span>
             {% endif %}
         </div>
         <div class="card-body" style="{% if fines_list %}padding:0;{% endif %}">
@@ -174,11 +174,12 @@
                             <th>Session</th>
                             <th>Status</th>
                             <th>Fine</th>
+                            <th style="width:44px;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for f in fines_list %}
-                        <tr>
+                        <tr data-attendance-fine-row="{{ f.id }}">
                             <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ f.date|fmt_dt }}</td>
                             <td><span class="badge badge-info" style="font-size:10px;">{{ f.session_id }}</span></td>
                             <td>
@@ -187,6 +188,13 @@
                                 {% else %}<span class="badge badge-warning">Late</span>{% endif %}
                             </td>
                             <td style="font-weight:700;color:var(--accent-danger);">₱{{ f.fine }}</td>
+                            <td>
+                                {% if f.id %}
+                                <button type="button" onclick="waiveAttendanceFine({{ f.id }})" class="btn btn-sm" style="padding:3px 5px;background:none;color:var(--text-muted);cursor:pointer;" title="Remove fine">
+                                    <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
+                                </button>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -210,7 +218,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
                 {% if manual_fines %}
-                <span class="badge badge-danger">₱{{ summary.manual_fines }}</span>
+                <span class="badge badge-danger" id="badge-manual-fines">{{ manual_fines|length }} · ₱{{ summary.manual_fines }}</span>
                 <button onclick="clearAllManualFines()" class="btn btn-sm" style="padding:3px 8px;background:none;border:1px solid var(--accent-danger);color:var(--accent-danger);cursor:pointer;font-size:11px;">
                     Clear
                 </button>
@@ -379,11 +387,12 @@
                         <th>Status</th>
                         <th>Fine</th>
                         <th>Reason</th>
+                        <th style="width:44px;"></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for r in records|reverse %}
-                    <tr>
+                    <tr data-attendance-fine-row="{{ r.id }}">
                         <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.datetime|fmt_dt }}</td>
                         <td><span class="badge badge-info" style="font-size:10px;">{{ r.session_id }}</span></td>
                         <td>
@@ -393,15 +402,22 @@
                             {% elif 'Partial' in r.status %}<span class="badge badge-warning">Partial</span>
                             {% else %}<span class="badge">{{ r.status }}</span>{% endif %}
                         </td>
-                        <td>
+                        <td class="cell-attendance-fine" data-fine="{{ r.fine or 0 }}">
                             {% if r.fine and r.fine > 0 %}
                                 <span style="font-weight:700;color:var(--accent-danger);">₱{{ r.fine }}</span>
                             {% else %}
                                 <span style="color:var(--text-muted);">—</span>
                             {% endif %}
                         </td>
-                        <td style="font-size:11px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.fine_reason or '' }}">
+                        <td class="cell-fine-reason" style="font-size:11px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.fine_reason or '' }}">
                             {{ r.fine_reason or '—' }}
+                        </td>
+                        <td>
+                            {% if r.id and r.fine and r.fine > 0 %}
+                            <button type="button" onclick="waiveAttendanceFine({{ r.id }})" class="btn btn-sm" style="padding:3px 5px;background:none;color:var(--text-muted);cursor:pointer;" title="Remove fine">
+                                <i data-lucide="trash-2" style="width:13px;height:13px;"></i>
+                            </button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -468,9 +484,9 @@
                 Payment for <strong>{{ student.name }}</strong>
             </p>
             <div style="display:flex;gap:8px;margin-bottom:14px;padding:10px;background:var(--bg-input);border-radius:var(--radius-sm);font-size:12px;flex-wrap:wrap;">
-                <span>Fines: <strong style="color:var(--accent-danger);">₱{{ summary.total_fines }}</strong></span>
-                <span>Paid: <strong style="color:var(--accent-success);">₱{{ summary.total_paid }}</strong></span>
-                <span>Balance: <strong style="color:{% if summary.balance > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">₱{{ summary.balance }}</strong></span>
+                <span>Fines: <strong id="footer-total-fines" style="color:var(--accent-danger);">₱{{ summary.total_fines }}</strong></span>
+                <span>Paid: <strong id="footer-total-paid" style="color:var(--accent-success);">₱{{ summary.total_paid }}</strong></span>
+                <span>Balance: <strong id="footer-balance" style="color:{% if summary.balance > 0 %}var(--accent-danger){% else %}var(--accent-success){% endif %};">₱{{ summary.balance }}</strong></span>
             </div>
             <form id="paymentForm" onsubmit="submitPayment(event)">
                 <div class="form-group">
@@ -545,6 +561,30 @@
 {% block scripts %}
 <script>
     const STUDENT_NUMBER = '{{ student.student_number }}';
+
+    function applyFinancialSummary(f) {
+        if (!f) return;
+        const bal = document.getElementById('stat-balance-value');
+        if (bal) {
+            bal.textContent = '₱' + f.balance;
+            bal.style.color = f.balance > 0 ? 'var(--accent-danger)' : 'var(--accent-success)';
+        }
+        const tp = document.getElementById('stat-total-paid-value');
+        if (tp) tp.textContent = '₱' + f.total_paid;
+        const ba = document.getElementById('badge-attendance-fines');
+        if (ba) ba.textContent = f.attendance_fine_rows + ' · ₱' + f.attendance_fines;
+        const bm = document.getElementById('badge-manual-fines');
+        if (bm) bm.textContent = f.manual_fine_rows + ' · ₱' + f.manual_fines;
+        const ft = document.getElementById('footer-total-fines');
+        if (ft) ft.textContent = '₱' + f.total_fines;
+        const fp = document.getElementById('footer-total-paid');
+        if (fp) fp.textContent = '₱' + f.total_paid;
+        const fb = document.getElementById('footer-balance');
+        if (fb) {
+            fb.textContent = '₱' + f.balance;
+            fb.style.color = f.balance > 0 ? 'var(--accent-danger)' : 'var(--accent-success)';
+        }
+    }
 
     function openAddFineModal() {
         document.getElementById('addFineForm').reset();
@@ -625,8 +665,13 @@
         if (!confirm('Remove this fine?')) return;
         try {
             const data = await apiCall(`/api/students/${STUDENT_NUMBER}/fines/${fineId}`, 'DELETE');
-            if (data.success) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 600); }
-            else { showToast(data.message, 'error'); }
+            if (data.success) {
+                showToast(data.message, 'success');
+                applyFinancialSummary(data.financial);
+                setTimeout(() => location.reload(), 500);
+            } else {
+                showToast(data.message, 'error');
+            }
         } catch (err) { showToast('Failed to remove fine.', 'error'); }
     }
 
@@ -634,9 +679,28 @@
         if (!confirm('Delete ALL manual fines for this student?')) return;
         try {
             const data = await apiCall(`/api/students/${STUDENT_NUMBER}/fines/clear`, 'DELETE');
-            if (data.success) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 600); }
-            else { showToast(data.message, 'error'); }
+            if (data.success) {
+                showToast(data.message, 'success');
+                applyFinancialSummary(data.financial);
+                setTimeout(() => location.reload(), 500);
+            } else {
+                showToast(data.message, 'error');
+            }
         } catch (err) { showToast('Failed to clear fines.', 'error'); }
+    }
+
+    async function waiveAttendanceFine(recordId) {
+        if (!recordId || !confirm('Remove this attendance fine? The balance will go down by that amount.')) return;
+        try {
+            const data = await apiCall(`/api/students/${STUDENT_NUMBER}/attendance-fines/${recordId}`, 'DELETE');
+            if (data.success) {
+                showToast(data.message, 'success');
+                applyFinancialSummary(data.financial);
+                setTimeout(() => location.reload(), 500);
+            } else {
+                showToast(data.message || 'Failed to remove fine.', 'error');
+            }
+        } catch (err) { showToast('Failed to remove attendance fine.', 'error'); }
     }
 
     async function deletePayment(paymentId) {
