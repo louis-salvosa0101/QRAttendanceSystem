@@ -162,18 +162,18 @@
     </div>
     <div class="card-body" id="activeSessionsList">
         {% if active_sessions %}
-            {% for session in active_sessions %}
-            <div class="session-card" id="session-{{ session.session_id }}">
+            {% for sess in active_sessions %}
+            <div class="session-card" id="session-{{ sess.session_id }}">
                 <div class="session-header">
                     <div>
-                        <div class="session-id">{{ session.subject or 'Untitled Session' }}</div>
-                        <div style="font-size:11px;color:var(--text-muted);font-family:'Inter',monospace;margin-top:2px;">{{ session.session_id }}</div>
+                        <div class="session-id">{{ sess.subject or 'Untitled Session' }}</div>
+                        <div style="font-size:11px;color:var(--text-muted);font-family:'Inter',monospace;margin-top:2px;">{{ sess.session_id }}</div>
                     </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;">
                         <span class="badge badge-success">Active</span>
                         <button class="btn btn-sm btn-danger"
-                                onclick="endSession('{{ session.session_id }}', '{{ session.subject|e }}', {{ session.fine_absent or 50 }}, {{ session.fine_partial or 25 }})"
-                                id="btn-close-{{ session.session_id }}">
+                                onclick="endSession('{{ sess.session_id }}', '{{ sess.subject|e }}', {{ FINE_ABSENT if sess.get('fine_absent') is none else sess.get('fine_absent') }}, {{ FINE_PARTIAL if sess.get('fine_partial') is none else sess.get('fine_partial') }})"
+                                id="btn-close-{{ sess.session_id }}">
                             <i data-lucide="x"></i> Close
                         </button>
                     </div>
@@ -181,13 +181,13 @@
                 <div class="session-meta">
                     <div class="session-meta-item">
                         <div class="session-meta-label">Teacher</div>
-                        <div class="session-meta-value">{{ session.teacher or '—' }}</div>
+                        <div class="session-meta-value">{{ sess.teacher or '—' }}</div>
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Scheduled</div>
                         <div class="session-meta-value">
-                            {% if session.scheduled_start %}
-                                {{ session.scheduled_start|fmt_dt }}
+                            {% if sess.scheduled_start %}
+                                {{ sess.scheduled_start|fmt_dt }}
                             {% else %}
                                 <span style="color:var(--text-muted);font-size:11px;">Immediate</span>
                             {% endif %}
@@ -195,33 +195,33 @@
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Expires</div>
-                        <div class="session-meta-value">{{ session.expires_at|fmt_dt }}</div>
+                        <div class="session-meta-value">{{ sess.expires_at|fmt_dt }}</div>
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Attendance</div>
                         <div class="session-meta-value" style="color:var(--accent-success);font-size:16px;font-weight:700;">
-                            {{ session.attendance_count }}
+                            {{ sess.attendance_count }}
                         </div>
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Required</div>
                         <div class="session-meta-value" style="font-size:11px;">
-                            {% if session.required_course %}{{ session.required_course }}{% endif %}
-                            {% if session.required_year %} · Yr {{ session.required_year|join(', ') }}{% endif %}
-                            {% if session.required_section %} · Sec {{ session.required_section }}{% endif %}
-                            {% if not session.required_course and not session.required_year and not session.required_section %}All Students{% endif %}
+                            {% if sess.required_course %}{{ sess.required_course }}{% endif %}
+                            {% if sess.required_year %} · Yr {{ sess.required_year|join(', ') }}{% endif %}
+                            {% if sess.required_section %} · Sec {{ sess.required_section }}{% endif %}
+                            {% if not sess.required_course and not sess.required_year and not sess.required_section %}All Students{% endif %}
                         </div>
                     </div>
                     <div class="session-meta-item">
                         <div class="session-meta-label">Fines</div>
                         <div class="session-meta-value" style="font-size:11px;">
-                            L₱{{ session.fine_late or 25 }} · P₱{{ session.fine_partial or 25 }} · A₱{{ session.fine_absent or 50 }}
+                            L₱{{ FINE_LATE if sess.get('fine_late') is none else sess.get('fine_late') }} · P₱{{ FINE_PARTIAL if sess.get('fine_partial') is none else sess.get('fine_partial') }} · A₱{{ FINE_ABSENT if sess.get('fine_absent') is none else sess.get('fine_absent') }}
                         </div>
                     </div>
-                    {% if session.notes %}
+                    {% if sess.notes %}
                     <div class="session-meta-item">
                         <div class="session-meta-label">Notes</div>
-                        <div class="session-meta-value">{{ session.notes }}</div>
+                        <div class="session-meta-value">{{ sess.notes }}</div>
                     </div>
                     {% endif %}
                 </div>
@@ -289,37 +289,37 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for session in all_sessions|reverse %}
-                    <tr data-status="{{ 'active' if session.is_active else 'closed' }}">
+                    {% for sess in all_sessions|reverse %}
+                    <tr data-status="{{ 'active' if sess.is_active else 'closed' }}">
                         <td>
-                            <div style="font-weight:600;color:var(--text-primary);">{{ session.subject or 'Untitled Session' }}</div>
-                            <div style="font-size:11px;color:var(--text-muted);font-family:'Inter',monospace;">{{ session.session_id }}</div>
+                            <div style="font-weight:600;color:var(--text-primary);">{{ sess.subject or 'Untitled Session' }}</div>
+                            <div style="font-size:11px;color:var(--text-muted);font-family:'Inter',monospace;">{{ sess.session_id }}</div>
                         </td>
-                        <td>{{ session.teacher or '—' }}</td>
+                        <td>{{ sess.teacher or '—' }}</td>
                         <td style="font-size:11px;color:var(--text-muted);">
-                            {% if session.required_course %}{{ session.required_course }}{% endif %}
-                            {% if session.required_year %} Yr{{ session.required_year|join(',') }}{% endif %}
-                            {% if session.required_section %} S{{ session.required_section }}{% endif %}
-                            {% if not session.required_course and not session.required_year and not session.required_section %}All{% endif %}
+                            {% if sess.required_course %}{{ sess.required_course }}{% endif %}
+                            {% if sess.required_year %} Yr{{ sess.required_year|join(',') }}{% endif %}
+                            {% if sess.required_section %} S{{ sess.required_section }}{% endif %}
+                            {% if not sess.required_course and not sess.required_year and not sess.required_section %}All{% endif %}
                         </td>
                         <td style="font-size:11px;">
-                            {% if session.scheduled_start %}{{ session.scheduled_start|fmt_dt }}{% else %}—{% endif %}
+                            {% if sess.scheduled_start %}{{ sess.scheduled_start|fmt_dt }}{% else %}—{% endif %}
                         </td>
                         <td style="font-size:11px;white-space:nowrap;">
-                            ₱{{ session.fine_late or 25 }}/₱{{ session.fine_partial or 25 }}/₱{{ session.fine_absent or 50 }}
+                            ₱{{ FINE_LATE if sess.get('fine_late') is none else sess.get('fine_late') }}/₱{{ FINE_PARTIAL if sess.get('fine_partial') is none else sess.get('fine_partial') }}/₱{{ FINE_ABSENT if sess.get('fine_absent') is none else sess.get('fine_absent') }}
                         </td>
                         <td>
-                            <span style="font-weight:700;color:var(--accent-success);">{{ session.attendance_count }}</span>
+                            <span style="font-weight:700;color:var(--accent-success);">{{ sess.attendance_count }}</span>
                         </td>
                         <td>
-                            {% if session.is_active %}
+                            {% if sess.is_active %}
                                 <span class="badge badge-success">Active</span>
                             {% else %}
                                 <span class="badge badge-danger">Closed</span>
                             {% endif %}
                         </td>
                         <td style="text-align:center;">
-                            <button class="btn btn-sm btn-danger" onclick="deleteSession('{{ session.session_id }}', '{{ session.subject|e }}')" title="Delete session" style="padding:4px 8px;min-width:unset;">
+                            <button class="btn btn-sm btn-danger" onclick="deleteSession('{{ sess.session_id }}', '{{ sess.subject|e }}')" title="Delete session" style="padding:4px 8px;min-width:unset;">
                                 <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
                             </button>
                         </td>
@@ -366,6 +366,12 @@
         document.querySelectorAll('input[name="sessionYear"]').forEach(cb => cb.checked = false);
     }
 
+    function parseOptionalInt(str) {
+        if (str === undefined || str === null) return null;
+        const n = parseInt(String(str).trim(), 10);
+        return Number.isFinite(n) ? n : null;
+    }
+
     async function createSession(e) {
         e.preventDefault();
         const subject = document.getElementById('sessionSubject').value;
@@ -378,10 +384,10 @@
 
         const scheduledRaw = document.getElementById('sessionScheduledStart').value;
         const scheduled_start = scheduledRaw || '';
-        const late_threshold_minutes = document.getElementById('sessionLateThreshold').value;
-        const fine_late = document.getElementById('sessionFineLate').value;
-        const fine_partial = document.getElementById('sessionFinePartial').value;
-        const fine_absent = document.getElementById('sessionFineAbsent').value;
+        const late_threshold_minutes = parseOptionalInt(document.getElementById('sessionLateThreshold').value);
+        const fine_late = parseOptionalInt(document.getElementById('sessionFineLate').value);
+        const fine_partial = parseOptionalInt(document.getElementById('sessionFinePartial').value);
+        const fine_absent = parseOptionalInt(document.getElementById('sessionFineAbsent').value);
 
         try {
             const result = await apiCall('/api/session/create', 'POST', {
@@ -405,8 +411,10 @@
 
     async function endSession(sessionId, sessionName, fineAbsent, finePartial) {
         const label = sessionName || sessionId;
-        fineAbsent = fineAbsent || 50;
-        finePartial = finePartial || 25;
+        const fa = Number(fineAbsent);
+        const fp = Number(finePartial);
+        fineAbsent = Number.isFinite(fa) ? fa : 50;
+        finePartial = Number.isFinite(fp) ? fp : 25;
         if (!confirm(`Close "${label}"?\n\nAbsent students: ₱${fineAbsent} fine\nPartial scans: ₱${finePartial} fine\n\nProceed?`)) return;
 
         try {

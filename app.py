@@ -12,7 +12,7 @@ from flask_login import login_required, login_user, logout_user, current_user
 from werkzeug.utils import secure_filename
 from config import (SECRET_KEY, QR_CODES_DIR, EXCEL_DIR, MASTER_LIST_DIR,
                     ATTENDANCE_LOG_FILE, FINE_LATE, FINE_ABSENT, FINE_PARTIAL,
-                    LATE_THRESHOLD_MINUTES, ph_now)
+                    LATE_THRESHOLD_MINUTES, ph_now, session_fine_value)
 from crypto_utils import decrypt_qr_data
 from qr_generator import generate_single_qr, batch_generate_from_excel
 from session_manager import (create_session, get_session, get_active_sessions,
@@ -35,6 +35,32 @@ from db import init_db
 from auth import login_manager, authenticate, seed_default_admin, hash_password
 
 app = Flask(__name__)
+
+
+def _body_optional_int(data, key):
+    """Parse JSON body field as int; treat None and blank strings as missing."""
+    if not data:
+        return None
+    v = data.get(key)
+    if v is None:
+        return None
+    if isinstance(v, str) and not str(v).strip():
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+@app.context_processor
+def inject_config_fines():
+    """Expose global fine defaults to templates (per-session amounts use these when unset)."""
+    return {
+        'FINE_LATE': FINE_LATE,
+        'FINE_ABSENT': FINE_ABSENT,
+        'FINE_PARTIAL': FINE_PARTIAL,
+    }
+
 
 with app.app_context():
     init_db()
@@ -332,7 +358,7 @@ def student_detail_page(student_number):
 @login_required
 def api_create_session():
     """Create a new attendance session."""
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     subject = data.get('subject', '')
     teacher = data.get('teacher', '')
     notes = data.get('notes', '')
@@ -341,19 +367,10 @@ def api_create_session():
     required_year = data.get('required_year', [])
     required_section = data.get('required_section', '')
     scheduled_start = data.get('scheduled_start', '')
-    fine_late = data.get('fine_late')
-    fine_absent = data.get('fine_absent')
-    fine_partial = data.get('fine_partial')
-    late_threshold_minutes = data.get('late_threshold_minutes')
-
-    if fine_late is not None:
-        fine_late = int(fine_late)
-    if fine_absent is not None:
-        fine_absent = int(fine_absent)
-    if fine_partial is not None:
-        fine_partial = int(fine_partial)
-    if late_threshold_minutes is not None:
-        late_threshold_minutes = int(late_threshold_minutes)
+    fine_late = _body_optional_int(data, 'fine_late')
+    fine_absent = _body_optional_int(data, 'fine_absent')
+    fine_partial = _body_optional_int(data, 'fine_partial')
+    late_threshold_minutes = _body_optional_int(data, 'late_threshold_minutes')
 
     session = create_session(
         subject=subject,
@@ -405,8 +422,8 @@ def api_close_session(session_id):
         'message': message,
         'absent_logged': absent_result.get('absent_logged', 0),
         'partial_updated': absent_result.get('partial_updated', 0),
-        'fine_absent': session.get('fine_absent') or _FA,
-        'fine_partial': session.get('fine_partial') or _FP,
+        'fine_absent': session_fine_value(session, 'fine_absent', _FA),
+        'fine_partial': session_fine_value(session, 'fine_partial', _FP),
     })
 
 

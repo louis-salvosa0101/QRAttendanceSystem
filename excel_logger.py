@@ -8,7 +8,8 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from config import ATTENDANCE_LOG_FILE, EXCEL_DIR, FINE_ABSENT, FINE_PARTIAL, FINE_LATE, ph_now
+from config import (ATTENDANCE_LOG_FILE, EXCEL_DIR, FINE_ABSENT, FINE_PARTIAL,
+                     FINE_LATE, ph_now, session_fine_value)
 from db import get_db, _cur
 
 
@@ -116,8 +117,8 @@ def log_absent_students(session_id: str, session_data: dict,
     Returns dict with counts: absent_logged, partial_updated
     """
     scanned = session_data.get('scanned_students', {})
-    s_fine_absent = session_data.get('fine_absent') or FINE_ABSENT
-    s_fine_partial = session_data.get('fine_partial') or FINE_PARTIAL
+    s_fine_absent = session_fine_value(session_data, 'fine_absent', FINE_ABSENT)
+    s_fine_partial = session_fine_value(session_data, 'fine_partial', FINE_PARTIAL)
     result = {'absent_logged': 0, 'partial_updated': 0}
     now = ph_now().strftime('%Y-%m-%d %H:%M:%S')
 

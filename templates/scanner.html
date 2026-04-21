@@ -32,9 +32,9 @@
                 <div class="form-group" style="margin-bottom: 0;">
                     <select class="form-select" id="sessionSelect">
                         <option value="">Select a session...</option>
-                        {% for session in active_sessions %}
-                        <option value="{{ session.session_id }}">
-                            {{ session.session_id }} — {{ session.subject or 'No subject' }}{% if session.required_course or session.required_year or session.required_section %} — {% if session.required_course %}{{ session.required_course }}{% endif %}{% if session.required_year %} Yr{{ session.required_year|join(',') }}{% endif %}{% if session.required_section %} Sec{{ session.required_section }}{% endif %}{% endif %} ({{ session.attendance_count }} scans)
+                        {% for sess in active_sessions %}
+                        <option value="{{ sess.session_id }}">
+                            {{ sess.session_id }} — {{ sess.subject or 'No subject' }}{% if sess.required_course or sess.required_year or sess.required_section %} — {% if sess.required_course %}{{ sess.required_course }}{% endif %}{% if sess.required_year %} Yr{{ sess.required_year|join(',') }}{% endif %}{% if sess.required_section %} Sec{{ sess.required_section }}{% endif %}{% endif %} ({{ sess.attendance_count }} scans)
                         </option>
                         {% endfor %}
                     </select>

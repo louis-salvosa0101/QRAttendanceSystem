@@ -138,15 +138,17 @@
     <div class="card-body">
         {% set session_map = {} %}
         {% for s in all_sessions %}
-            {% set _ = session_map.update({s.session_id: s}) %}
+            {% set sid = (s.session_id ~ '')|trim %}
+            {% set _ = session_map.update({sid: s}) %}
         {% endfor %}
 
         {% if records %}
             {% for session_id, session_records in records|groupby('session_id') %}
-            {% set sess = session_map.get(session_id, {}) %}
-            {% set s_fine_late = sess.get('fine_late', 25) or 25 %}
-            {% set s_fine_absent = sess.get('fine_absent', 50) or 50 %}
-            {% set s_fine_partial = sess.get('fine_partial', 25) or 25 %}
+            {% set sid_key = (session_id ~ '')|trim %}
+            {% set sess = session_map.get(sid_key, {}) %}
+            {% set s_fine_late = FINE_LATE if sess.get('fine_late') is none else sess.get('fine_late') %}
+            {% set s_fine_absent = FINE_ABSENT if sess.get('fine_absent') is none else sess.get('fine_absent') %}
+            {% set s_fine_partial = FINE_PARTIAL if sess.get('fine_partial') is none else sess.get('fine_partial') %}
             <div class="mb-3" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
                 <div style="background:var(--bg-input);padding:10px 14px;border-bottom:1px solid var(--border);">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">

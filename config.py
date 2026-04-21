@@ -73,6 +73,24 @@ FINE_ABSENT = 50      # Fine for not scanning at all
 FINE_PARTIAL = 25     # Fine for only Time In or only Time Out
 LATE_THRESHOLD_MINUTES = 15  # Minutes after session start before considered late
 
+
+def session_fine_value(session, key: str, default: int) -> int:
+    """Read a per-session integer (fine or threshold) from a session dict.
+
+    Only ``None`` or a missing key uses ``default``. ``0`` is kept so a
+    session can legitimately disable a fine or use a zero threshold.
+    """
+    if not session:
+        return default
+    v = session.get(key)
+    if v is None:
+        return default
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
 # Ensure directories exist
 for d in [QR_CODES_DIR, EXCEL_DIR, MASTER_LIST_DIR]:
     os.makedirs(d, exist_ok=True)

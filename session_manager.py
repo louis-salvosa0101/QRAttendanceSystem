@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 
 from config import (SESSION_DURATION_HOURS, FINE_LATE, FINE_ABSENT,
                     FINE_PARTIAL, LATE_THRESHOLD_MINUTES, ph_now,
-                    TIME_OUT_COOLDOWN_AFTER_TIME_IN_SECONDS)
+                    TIME_OUT_COOLDOWN_AFTER_TIME_IN_SECONDS,
+                    session_fine_value)
 from db import get_db, _cur
 
 _SESSION_COLS = """session_id, subject, teacher, notes, created_at, expires_at,
@@ -233,7 +234,7 @@ def _handle_auto_expired(session_ids: list):
         if not session:
             continue
 
-        s_fine_partial = session.get('fine_partial') or FINE_PARTIAL
+        s_fine_partial = session_fine_value(session, 'fine_partial', FINE_PARTIAL)
         scanned = session.get('scanned_students', {})
 
         with get_db() as conn:
@@ -324,8 +325,9 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
 
     if student_number not in scanned:
         # First scan -> Time In
-        s_fine_late = session.get('fine_late') or FINE_LATE
-        s_threshold = session.get('late_threshold_minutes') or LATE_THRESHOLD_MINUTES
+        s_fine_late = session_fine_value(session, 'fine_late', FINE_LATE)
+        s_threshold = session_fine_value(session, 'late_threshold_minutes',
+                                         LATE_THRESHOLD_MINUTES)
         session_start = datetime.fromisoformat(
             session.get('scheduled_start') or session['created_at']
         )
@@ -416,8 +418,9 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
 
     if existing is None:
         # First scan -> Time In
-        s_fine_late = session.get('fine_late') or FINE_LATE
-        s_threshold = session.get('late_threshold_minutes') or LATE_THRESHOLD_MINUTES
+        s_fine_late = session_fine_value(session, 'fine_late', FINE_LATE)
+        s_threshold = session_fine_value(session, 'late_threshold_minutes',
+                                         LATE_THRESHOLD_MINUTES)
         session_start = datetime.fromisoformat(
             session.get('scheduled_start') or session['created_at']
         )
@@ -496,7 +499,7 @@ def close_session(session_id: str) -> tuple:
     if not session:
         return False, "Session not found."
 
-    s_fine_partial = session.get('fine_partial') or FINE_PARTIAL
+    s_fine_partial = session_fine_value(session, 'fine_partial', FINE_PARTIAL)
 
     with get_db() as conn:
         cur = _cur(conn)
