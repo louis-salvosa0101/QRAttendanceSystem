@@ -1281,12 +1281,21 @@ def api_generate_summary():
 @app.route('/api/records/student-fines-summary', methods=['GET'])
 @login_required
 def api_student_fines_summary():
-    """Download Excel summary of fines for every registered student (includes zero sessions)."""
+    """Download Excel summary of fines for every registered student (includes zero sessions).
+
+    Optional query: year — e.g. ?year=1 limits the export to students with that year level.
+    """
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill
     from openpyxl.utils import get_column_letter
 
     all_students = get_all_students()
+    year_filter = (request.args.get('year') or '').strip()
+    if year_filter:
+        all_students = [
+            st for st in all_students
+            if str(st.get('year') or '').strip() == year_filter
+        ]
     records = get_attendance_records()
 
     student_data = {}
@@ -1408,10 +1417,14 @@ def api_student_fines_summary():
     out = io.BytesIO()
     wb.save(out)
     out.seek(0)
+    fname = 'student_fines_summary.xlsx'
+    if year_filter:
+        safe = ''.join(c for c in year_filter if c.isalnum() or c in ('-', '_'))[:20] or 'year'
+        fname = f'student_fines_summary_year_{safe}.xlsx'
     return send_file(
         out,
         as_attachment=True,
-        download_name='student_fines_summary.xlsx',
+        download_name=fname,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
 

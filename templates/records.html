@@ -28,20 +28,66 @@
 .records-badge-danger { background:rgba(239,68,68,0.12); color:var(--accent-danger); }
 .records-fine-cell { font-weight:500; color:var(--text-muted); }
 .records-fine-cell.records-fine-amount { color:var(--accent-danger); font-weight:700; }
+.summary-dd-item:hover { background:var(--bg-input); }
+/* Dropdowns escape .card { overflow:hidden } and sit above the next card */
+.card-records-toolbar {
+    position: relative;
+    z-index: 20;
+    overflow: visible;
+}
+.card-records-toolbar .card-header,
+.card-records-toolbar .card-body {
+    overflow: visible;
+}
+#summary-dropdown,
+#export-dropdown {
+    z-index: 100;
+}
 </style>
 
 <!-- Filters -->
-<div class="card mb-3">
+<div class="card mb-3 card-records-toolbar">
     <div class="card-header">
         <div class="card-title">
             <i data-lucide="filter"></i>
             Filter
         </div>
         <div class="action-bar">
-            <button class="btn btn-sm btn-primary" onclick="generateSummary()" id="btn-generate-summary">
-                <i data-lucide="bar-chart-3"></i>
-                Summary
-            </button>
+            <div style="position:relative;display:inline-block;" id="summary-dropdown-wrap">
+                <button class="btn btn-sm btn-primary" onclick="toggleSummaryDropdown()" id="btn-summary-trigger" type="button">
+                    <i data-lucide="bar-chart-3"></i>
+                    Summary
+                    <i data-lucide="chevron-down" style="width:14px;height:14px;margin-left:2px;"></i>
+                </button>
+                <div id="summary-dropdown" style="display:none;position:absolute;left:0;top:100%;margin-top:4px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);z-index:50;min-width:240px;">
+                    <div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Download fines (Excel)</div>
+                    <button type="button" class="summary-dd-item" onclick="downloadFinesSummary('')" style="display:flex;width:100%;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);background:transparent;border:none;cursor:pointer;text-align:left;border-bottom:1px solid var(--border);">
+                        <i data-lucide="users" style="width:14px;height:14px;color:var(--accent-primary);flex-shrink:0;"></i>
+                        <span style="font-weight:600;">All year levels</span>
+                    </button>
+                    <div style="padding:8px 12px 4px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">By year level</div>
+                    <button type="button" class="summary-dd-item" onclick="downloadFinesSummary('1')" style="display:flex;width:100%;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);background:transparent;border:none;cursor:pointer;text-align:left;">
+                        <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--text-muted);flex-shrink:0;"></i>
+                        <span>1st Year</span>
+                    </button>
+                    <button type="button" class="summary-dd-item" onclick="downloadFinesSummary('2')" style="display:flex;width:100%;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);background:transparent;border:none;cursor:pointer;text-align:left;">
+                        <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--text-muted);flex-shrink:0;"></i>
+                        <span>2nd Year</span>
+                    </button>
+                    <button type="button" class="summary-dd-item" onclick="downloadFinesSummary('3')" style="display:flex;width:100%;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);background:transparent;border:none;cursor:pointer;text-align:left;">
+                        <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--text-muted);flex-shrink:0;"></i>
+                        <span>3rd Year</span>
+                    </button>
+                    <button type="button" class="summary-dd-item" onclick="downloadFinesSummary('4')" style="display:flex;width:100%;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);background:transparent;border:none;cursor:pointer;text-align:left;">
+                        <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--text-muted);flex-shrink:0;"></i>
+                        <span>4th Year</span>
+                    </button>
+                    <button type="button" class="summary-dd-item" onclick="downloadFinesSummary('5')" style="display:flex;width:100%;align-items:center;gap:8px;padding:8px 12px 10px;font-size:13px;color:var(--text-primary);background:transparent;border:none;cursor:pointer;text-align:left;">
+                        <i data-lucide="graduation-cap" style="width:14px;height:14px;color:var(--text-muted);flex-shrink:0;"></i>
+                        <span>5th Year</span>
+                    </button>
+                </div>
+            </div>
             <div style="position:relative;display:inline-block;" id="export-dropdown-wrap">
                 <button class="btn btn-sm btn-success" onclick="toggleExportDropdown()" id="btn-download-records" type="button">
                     <i data-lucide="download"></i>
@@ -264,11 +310,23 @@
 
 {% block scripts %}
 <script>
-    async function generateSummary() {
-        const btn = document.getElementById('btn-generate-summary');
+    function toggleSummaryDropdown() {
+        const dd = document.getElementById('summary-dropdown');
+        const exp = document.getElementById('export-dropdown');
+        const open = dd.style.display === 'none';
+        dd.style.display = open ? 'block' : 'none';
+        if (open && exp) exp.style.display = 'none';
+        if (open) lucide.createIcons();
+    }
+
+    async function downloadFinesSummary(yearLevel) {
+        const dd = document.getElementById('summary-dropdown');
+        if (dd) dd.style.display = 'none';
+        const btn = document.getElementById('btn-summary-trigger');
         if (btn) { btn.disabled = true; }
         try {
-            const response = await fetch('/api/records/student-fines-summary', {
+            const qs = yearLevel ? ('?year=' + encodeURIComponent(yearLevel)) : '';
+            const response = await fetch('/api/records/student-fines-summary' + qs, {
                 method: 'GET',
                 credentials: 'same-origin',
             });
@@ -285,7 +343,9 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'student_fines_summary.xlsx';
+            a.download = yearLevel
+                ? ('student_fines_summary_year_' + yearLevel + '.xlsx')
+                : 'student_fines_summary.xlsx';
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -334,13 +394,21 @@
 
     function toggleExportDropdown() {
         const dd = document.getElementById('export-dropdown');
-        dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+        const sum = document.getElementById('summary-dropdown');
+        const open = dd.style.display === 'none';
+        dd.style.display = open ? 'block' : 'none';
+        if (open && sum) sum.style.display = 'none';
     }
 
     document.addEventListener('click', function(e) {
         const wrap = document.getElementById('export-dropdown-wrap');
         if (wrap && !wrap.contains(e.target)) {
             document.getElementById('export-dropdown').style.display = 'none';
+        }
+        const sumWrap = document.getElementById('summary-dropdown-wrap');
+        if (sumWrap && !sumWrap.contains(e.target)) {
+            const sd = document.getElementById('summary-dropdown');
+            if (sd) sd.style.display = 'none';
         }
     });
 
