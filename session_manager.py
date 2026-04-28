@@ -517,6 +517,63 @@ def close_session(session_id: str) -> tuple:
     return True, "Session closed successfully."
 
 
+def sync_scan_row_from_attendance(
+    session_id: str,
+    student_number: str,
+    status: str,
+    time_in,
+    time_out,
+    fine: int = 0,
+    fine_reason: str = '',
+) -> None:
+    """
+    Align session_scans with attendance_records after manual post-close edits.
+    Absent -> delete scan row; Time Out -> upsert status out; Time In / Partial -> upsert status in.
+    """
+    sn = str(student_number).strip()
+    fine_i = int(fine or 0)
+    fr = (fine_reason or '') if fine_reason is not None else ''
+    ti = None if time_in is None or (isinstance(time_in, str) and not str(time_in).strip()) else str(time_in).strip()
+    to = None if time_out is None or (isinstance(time_out, str) and not str(time_out).strip()) else str(time_out).strip()
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        if status == 'Absent':
+            cur.execute(
+                "DELETE FROM session_scans WHERE session_id = %s AND student_number = %s",
+                (session_id, sn),
+            )
+            return
+
+        if status == 'Time Out' and ti and to:
+            cur.execute(
+                """INSERT INTO session_scans (session_id, student_number, status, time_in, time_out, fine, fine_reason)
+                   VALUES (%s, %s, 'out', %s, %s, %s, %s)
+                   ON CONFLICT (session_id, student_number) DO UPDATE SET
+                     status = 'out',
+                     time_in = EXCLUDED.time_in,
+                     time_out = EXCLUDED.time_out,
+                     fine = EXCLUDED.fine,
+                     fine_reason = EXCLUDED.fine_reason""",
+                (session_id, sn, ti, to, fine_i, fr),
+            )
+            return
+
+        if not ti:
+            ti = ph_now().isoformat()
+        cur.execute(
+            """INSERT INTO session_scans (session_id, student_number, status, time_in, time_out, fine, fine_reason)
+               VALUES (%s, %s, 'in', %s, NULL, %s, %s)
+               ON CONFLICT (session_id, student_number) DO UPDATE SET
+                 status = 'in',
+                 time_in = EXCLUDED.time_in,
+                 time_out = NULL,
+                 fine = EXCLUDED.fine,
+                 fine_reason = EXCLUDED.fine_reason""",
+            (session_id, sn, ti, fine_i, fr),
+        )
+
+
 def delete_session(session_id: str) -> bool:
     """Delete a single session, its scans, and attendance records."""
     with get_db() as conn:

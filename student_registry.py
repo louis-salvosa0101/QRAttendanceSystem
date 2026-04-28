@@ -119,6 +119,59 @@ def get_students_by_filter(course: str = None,
         return [dict(r) for r in cur.fetchall()]
 
 
+def search_students_by_last_name(
+    query: str,
+    limit: int = 25,
+    *,
+    allowed_numbers: list[str] | None = None,
+    exclude_numbers: list[str] | None = None,
+) -> list[dict]:
+    """
+    Search registry by last name (last whitespace-separated token in *name*)
+    or by substring anywhere in the full name. Optional *allowed_numbers* restricts
+    to that student_number set; *exclude_numbers* omits those numbers.
+    """
+    q = (query or '').strip()
+    if not q:
+        return []
+    limit = max(1, min(int(limit or 25), 50))
+    if allowed_numbers is not None and len(allowed_numbers) == 0:
+        return []
+
+    pattern = f'%{q.lower()}%'
+    conditions = [
+        "trim(COALESCE(name, '')) <> ''",
+        """(
+            lower(
+                (string_to_array(trim(name), ' '))[
+                    cardinality(string_to_array(trim(name), ' '))
+                ]
+            ) LIKE %s
+            OR lower(trim(name)) LIKE %s
+        )""",
+    ]
+    params = [pattern, pattern]
+
+    if allowed_numbers is not None:
+        conditions.append("student_number = ANY(%s)")
+        params.append(allowed_numbers)
+    if exclude_numbers:
+        conditions.append("NOT (student_number = ANY(%s))")
+        params.append(exclude_numbers)
+
+    where_sql = " AND ".join(conditions)
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            f"""SELECT student_number, name, course, year, section
+                FROM students WHERE {where_sql}
+                ORDER BY name
+                LIMIT %s""",
+            (*params, limit),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
 def update_student(student_number: str, name: str = None, course: str = None,
                    year: str = None, section: str = None,
                    new_student_number: str = None) -> tuple:

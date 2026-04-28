@@ -9,7 +9,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from config import (ATTENDANCE_LOG_FILE, EXCEL_DIR, FINE_ABSENT, FINE_PARTIAL,
-                     FINE_LATE, ph_now, session_fine_value)
+                     FINE_LATE, PH_TZ, ph_now, session_fine_value)
 from db import get_db, _cur
 
 
@@ -324,6 +324,232 @@ def get_attendance_records(session_id: str = None, student_number: str = None,
         rows = cur.fetchall()
 
     return [dict(r) for r in rows]
+
+
+ALLOWED_EDIT_STATUSES = frozenset({'Time In', 'Time Out', 'Absent', 'Partial (No Time Out)'})
+
+
+def _dt_empty(value) -> bool:
+    return value is None or (isinstance(value, str) and not str(value).strip())
+
+
+def normalize_attendance_datetime(value) -> str | None:
+    """Normalize UI/API datetime strings to 'YYYY-MM-DD HH:MM:SS' for storage."""
+    if _dt_empty(value):
+        return None
+    raw = str(value).strip().replace('Z', '+00:00')
+    if 'T' in raw and len(raw) == 16 and raw.count(':') == 1:
+        raw = raw + ':00'
+    try:
+        dt = datetime.fromisoformat(raw.replace(' ', 'T'))
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(PH_TZ).replace(tzinfo=None)
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except (ValueError, TypeError):
+        return str(value).strip()
+
+
+def assert_session_closed_for_attendance_edit(session_id: str) -> tuple[bool, str]:
+    """Return (True, '') if session exists and is inactive; else (False, message)."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT is_active FROM sessions WHERE session_id = %s", (session_id,))
+        row = cur.fetchone()
+    if not row:
+        return False, "Session not found."
+    if int(row.get('is_active') or 0) != 0:
+        return False, "Attendance can only be edited after the session is closed."
+    return True, ""
+
+
+def _validate_attendance_edit_payload(status: str, time_in, time_out) -> str | None:
+    if status == 'Time Out':
+        if _dt_empty(time_in) or _dt_empty(time_out):
+            return "Time Out requires both time in and time out."
+    elif status == 'Time In':
+        if _dt_empty(time_in):
+            return "Time In requires time in."
+    elif status == 'Partial (No Time Out)':
+        if _dt_empty(time_in):
+            return "Partial (No Time Out) requires time in."
+    return None
+
+
+def update_session_attendance_record(record_id: int, session_id: str, fields: dict) -> tuple[bool, str, dict | None]:
+    """
+    Update one attendance row for a closed session. *fields* may include:
+    status, time_in, time_out, fine, fine_reason, name, course, year, section.
+    Only keys present in *fields* are applied (None clears optional text fields where safe).
+    """
+    ok, msg = assert_session_closed_for_attendance_edit(session_id)
+    if not ok:
+        return False, msg, None
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            """SELECT id, recorded_at, name, student_number, course, year, section, session_id,
+                      status, fine, fine_reason, time_in, time_out
+               FROM attendance_records WHERE id = %s AND session_id = %s""",
+            (record_id, session_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False, "Attendance record not found for this session.", None
+
+        cur_status = row['status']
+        cur_ti = row.get('time_in')
+        cur_to = row.get('time_out')
+        cur_fine = int(row.get('fine') or 0)
+        cur_reason = row.get('fine_reason') or ''
+
+        if 'status' in fields and fields['status'] is not None:
+            st = str(fields['status']).strip()
+            if st not in ALLOWED_EDIT_STATUSES:
+                return False, f"Invalid status. Allowed: {', '.join(sorted(ALLOWED_EDIT_STATUSES))}.", None
+            cur_status = st
+        if 'time_in' in fields:
+            cur_ti = normalize_attendance_datetime(fields['time_in']) if fields['time_in'] is not None else None
+        if 'time_out' in fields:
+            v = fields['time_out']
+            cur_to = normalize_attendance_datetime(v) if v not in (None, '') else None
+        if 'fine' in fields and fields['fine'] is not None:
+            try:
+                cur_fine = max(0, int(fields['fine']))
+            except (TypeError, ValueError):
+                return False, "Fine must be a non-negative integer.", None
+        if 'fine_reason' in fields:
+            cur_reason = (fields['fine_reason'] if fields['fine_reason'] is not None else '') or ''
+
+        name = row.get('name')
+        course = row.get('course')
+        year = row.get('year')
+        section = row.get('section')
+        if 'name' in fields and fields['name'] is not None:
+            name = str(fields['name']).strip() or name
+        if 'course' in fields and fields['course'] is not None:
+            course = str(fields['course']).strip() or course
+        if 'year' in fields and fields['year'] is not None:
+            year = str(fields['year']).strip() or year
+        if 'section' in fields and fields['section'] is not None:
+            section = str(fields['section']).strip() or section
+
+        if cur_status == 'Absent':
+            cur_ti, cur_to = None, None
+        elif cur_status == 'Partial (No Time Out)':
+            cur_to = None
+        elif cur_status == 'Time In':
+            cur_to = None
+
+        err = _validate_attendance_edit_payload(cur_status, cur_ti, cur_to)
+        if err:
+            return False, err, None
+
+        cur.execute(
+            """UPDATE attendance_records SET
+                   status = %s, time_in = %s, time_out = %s, fine = %s, fine_reason = %s,
+                   name = %s, course = %s, year = %s, section = %s
+               WHERE id = %s AND session_id = %s""",
+            (cur_status, cur_ti, cur_to, cur_fine, cur_reason, name, course, year, section,
+             record_id, session_id),
+        )
+
+        cur.execute(
+            """SELECT id, recorded_at as datetime, name, student_number, course, year, section,
+                      session_id, status, fine, fine_reason, time_in, time_out
+               FROM attendance_records WHERE id = %s""",
+            (record_id,),
+        )
+        out = dict(cur.fetchone())
+
+    return True, "Attendance updated.", out
+
+
+def add_manual_attendance_record(
+    session_id: str,
+    student_data: dict,
+    status: str,
+    time_in,
+    time_out,
+    fine: int = 0,
+    fine_reason: str = '',
+) -> tuple[bool, str, dict | None]:
+    """
+    Insert a new attendance row for a student who has no row yet for this closed session.
+    """
+    ok, msg = assert_session_closed_for_attendance_edit(session_id)
+    if not ok:
+        return False, msg, None
+
+    st = str(status or '').strip()
+    if st not in ALLOWED_EDIT_STATUSES:
+        return False, f"Invalid status. Allowed: {', '.join(sorted(ALLOWED_EDIT_STATUSES))}.", None
+
+    ti = normalize_attendance_datetime(time_in)
+    to_val = normalize_attendance_datetime(time_out)
+    if st == 'Absent':
+        ti, to_val = None, None
+    elif st == 'Partial (No Time Out)':
+        to_val = None
+    elif st == 'Time In':
+        to_val = None
+
+    err = _validate_attendance_edit_payload(st, ti, to_val)
+    if err:
+        return False, err, None
+
+    try:
+        fine_i = max(0, int(fine or 0))
+    except (TypeError, ValueError):
+        return False, "Fine must be a non-negative integer.", None
+
+    sn = str(student_data.get('student_number', '')).strip()
+    if not sn:
+        return False, "Student number is required.", None
+
+    now = ph_now().strftime('%Y-%m-%d %H:%M:%S')
+    recorded_at = ti or now
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "SELECT id FROM attendance_records WHERE session_id = %s AND student_number = %s LIMIT 1",
+            (session_id, sn),
+        )
+        if cur.fetchone():
+            return False, "This student already has an attendance row for this session.", None
+
+        cur.execute(
+            """INSERT INTO attendance_records
+               (recorded_at, name, student_number, course, year, section, session_id,
+                status, fine, fine_reason, time_in, time_out)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING id""",
+            (
+                recorded_at,
+                student_data.get('name', ''),
+                sn,
+                student_data.get('course', ''),
+                student_data.get('year', ''),
+                student_data.get('section', ''),
+                session_id,
+                st,
+                fine_i,
+                fine_reason or '',
+                ti,
+                to_val,
+            ),
+        )
+        new_id = cur.fetchone()['id']
+        cur.execute(
+            """SELECT id, recorded_at as datetime, name, student_number, course, year, section,
+                      session_id, status, fine, fine_reason, time_in, time_out
+               FROM attendance_records WHERE id = %s""",
+            (new_id,),
+        )
+        out = dict(cur.fetchone())
+
+    return True, "Attendance record added.", out
 
 
 def get_session_stats(session_id: str) -> dict:

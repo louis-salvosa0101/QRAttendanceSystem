@@ -213,6 +213,8 @@
             {% for session_id, session_records in records|groupby('session_id') %}
             {% set sid_key = (session_id ~ '')|trim %}
             {% set sess = session_map.get(sid_key, {}) %}
+            {% set session_closed = (sess.get('session_id') is not none) and (sess.get('session_id') != '') and (not sess.get('is_active')) %}
+            {% set has_req = (sess.get('required_course') or '')|trim or (sess.get('required_section') or '')|trim or (sess.get('required_year') and sess.get('required_year')|length > 0) %}
             {% set s_fine_late = FINE_LATE if sess.get('fine_late') is none else sess.get('fine_late') %}
             {% set s_fine_absent = FINE_ABSENT if sess.get('fine_absent') is none else sess.get('fine_absent') %}
             {% set s_fine_partial = FINE_PARTIAL if sess.get('fine_partial') is none else sess.get('fine_partial') %}
@@ -233,8 +235,20 @@
                                 {% endif %}
                             {% endif %}
                         </div>
-                        <div style="display:flex;gap:6px;align-items:center;">
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                             <span class="badge badge-info">{{ session_records|list|length }}</span>
+                            {% if session_closed %}
+                            <button type="button" onclick="openAddAttendanceModal('{{ session_id|e }}')" class="btn btn-sm btn-outline" style="padding:3px 10px;font-size:11px;" title="Search by last name and add a row">
+                                <i data-lucide="user-plus" style="width:12px;height:12px;"></i>
+                                Add student
+                            </button>
+                            {% if has_req %}
+                            <button type="button" onclick="bulkAbsentMissing('{{ session_id|e }}')" class="btn btn-sm btn-outline" style="padding:3px 10px;font-size:11px;border-color:var(--accent-warning);color:var(--accent-warning);" title="Add Absent rows for required students who have no row yet">
+                                <i data-lucide="user-x" style="width:12px;height:12px;"></i>
+                                Missing as absent
+                            </button>
+                            {% endif %}
+                            {% endif %}
                             <button onclick="deleteSessionRecords('{{ session_id }}')" class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:none;border:1px solid var(--accent-danger);color:var(--accent-danger);cursor:pointer;" title="Delete session records">
                                 <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
                             </button>
@@ -268,6 +282,9 @@
                                 <th>Status</th>
                                 <th>Fine</th>
                                 <th>Reason</th>
+                                {% if session_closed %}
+                                <th style="width:76px;text-align:center;">Edit</th>
+                                {% endif %}
                             </tr>
                         </thead>
                         <tbody>
@@ -305,6 +322,24 @@
                                     {% if record.fine and record.fine > 0 %}₱{{ record.fine }}{% else %}—{% endif %}
                                 </td>
                                 <td style="font-size:11px;color:var(--text-muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ record.fine_reason or '' }}">{{ record.fine_reason or '—' }}</td>
+                                {% if session_closed %}
+                                <td style="text-align:center;">
+                                    <button type="button" class="btn btn-sm btn-outline" style="padding:4px 8px;min-width:unset;"
+                                            title="Edit attendance"
+                                            data-record-id="{{ record.id }}"
+                                            data-session-id="{{ session_id|e }}"
+                                            data-student-number="{{ record.student_number|e }}"
+                                            data-name="{{ record.name|e }}"
+                                            data-status="{{ record.status|e }}"
+                                            data-time-in="{{ (record.time_in or '')|e }}"
+                                            data-time-out="{{ (record.time_out or '')|e }}"
+                                            data-fine="{{ record.fine or 0 }}"
+                                            data-fine-reason="{{ (record.fine_reason or '')|e }}"
+                                            onclick="openAttendanceEditModal(this)">
+                                        <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+                                    </button>
+                                </td>
+                                {% endif %}
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -325,6 +360,125 @@
                 </p>
             </div>
         {% endif %}
+    </div>
+</div>
+
+<!-- Edit attendance (closed session) -->
+<div class="modal-overlay" id="attendanceEditModal">
+    <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i data-lucide="pencil" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;"></i>
+                Edit attendance
+            </h3>
+            <button type="button" class="modal-close" onclick="closeAttendanceEditModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <p id="editAttSubtitle" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;"></p>
+            <form id="attendanceEditForm" onsubmit="submitAttendanceEdit(event)">
+                <input type="hidden" id="editAttRecordId">
+                <input type="hidden" id="editAttSessionId">
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" id="editAttStatus" required>
+                        <option value="Time In">Time In</option>
+                        <option value="Time Out">Time Out</option>
+                        <option value="Absent">Absent</option>
+                        <option value="Partial (No Time Out)">Partial (No Time Out)</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Time in</label>
+                        <input type="datetime-local" class="form-input" id="editAttTimeIn" step="60">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Time out</label>
+                        <input type="datetime-local" class="form-input" id="editAttTimeOut" step="60">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Fine (₱)</label>
+                        <input type="number" class="form-input" id="editAttFine" min="0" step="1" value="0">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fine reason / notes</label>
+                    <input type="text" class="form-input" id="editAttReason" placeholder="e.g. Excused — medical">
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="closeAttendanceEditModal()">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="editAttSubmitBtn">
+                        <i data-lucide="check"></i> Save
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add attendance row (closed session) -->
+<div class="modal-overlay" id="attendanceAddModal">
+    <div class="modal" style="max-width:480px;">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i data-lucide="user-plus" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;"></i>
+                Add student to session
+            </h3>
+            <button type="button" class="modal-close" onclick="closeAttendanceAddModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Search by <strong>last name</strong> (or part of the full name). Only students without a row for this session are listed when the session has a required roster.</p>
+            <form id="attendanceAddForm" onsubmit="submitAttendanceAdd(event)">
+                <input type="hidden" id="addAttSessionId">
+                <input type="hidden" id="addAttStudentNumber" value="">
+                <div class="form-group">
+                    <label class="form-label">Last name search</label>
+                    <input type="text" class="form-input" id="addAttLastNameSearch" autocomplete="off" placeholder="e.g. Santos">
+                    <div id="addAttSearchResults" style="display:none;margin-top:6px;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);"></div>
+                    <div id="addAttSelectedStudent" style="display:none;margin-top:8px;padding:8px 10px;background:var(--bg-input);border-radius:var(--radius-sm);font-size:13px;">
+                        <span style="color:var(--text-muted);">Selected:</span>
+                        <strong id="addAttSelectedName"></strong>
+                        <span style="font-family:monospace;font-size:12px;color:var(--text-muted);" id="addAttSelectedSn"></span>
+                        <button type="button" class="btn btn-sm btn-outline" style="margin-left:8px;padding:2px 8px;font-size:11px;" onclick="clearAddStudentPick()">Clear</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" id="addAttStatus" required>
+                        <option value="Time Out">Time Out (present, in + out)</option>
+                        <option value="Time In">Time In only</option>
+                        <option value="Absent">Absent</option>
+                        <option value="Partial (No Time Out)">Partial (No Time Out)</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Time in</label>
+                        <input type="datetime-local" class="form-input" id="addAttTimeIn" step="60">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Time out</label>
+                        <input type="datetime-local" class="form-input" id="addAttTimeOut" step="60">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fine (₱)</label>
+                    <input type="number" class="form-input" id="addAttFine" min="0" step="1" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fine reason / notes</label>
+                    <input type="text" class="form-input" id="addAttReason" placeholder="Optional">
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="closeAttendanceAddModal()">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="addAttSubmitBtn">
+                        <i data-lucide="check"></i> Add
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -431,6 +585,236 @@
             const sd = document.getElementById('summary-dropdown');
             if (sd) sd.style.display = 'none';
         }
+    });
+
+    function toDatetimeLocalValue(raw) {
+        if (!raw || !String(raw).trim()) return '';
+        let s = String(raw).trim().replace(' ', 'T');
+        if (s.includes('.') && !s.includes('T')) s = s.split('.')[0];
+        const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+        if (!m) return '';
+        return m[1] + 'T' + m[2];
+    }
+
+    function openAttendanceEditModal(btn) {
+        const d = btn.dataset;
+        document.getElementById('editAttRecordId').value = d.recordId;
+        document.getElementById('editAttSessionId').value = d.sessionId;
+        document.getElementById('editAttSubtitle').textContent =
+            (d.name || '') + ' · #' + (d.studentNumber || '');
+        document.getElementById('editAttStatus').value = d.status || 'Absent';
+        document.getElementById('editAttTimeIn').value = toDatetimeLocalValue(d.timeIn || '');
+        document.getElementById('editAttTimeOut').value = toDatetimeLocalValue(d.timeOut || '');
+        document.getElementById('editAttFine').value = d.fine != null ? String(d.fine) : '0';
+        document.getElementById('editAttReason').value = d.fineReason || '';
+        document.getElementById('attendanceEditModal').classList.add('active');
+        lucide.createIcons();
+    }
+
+    function closeAttendanceEditModal() {
+        document.getElementById('attendanceEditModal').classList.remove('active');
+    }
+
+    let _addAttSearchTimer = null;
+
+    function clearAddStudentPick() {
+        document.getElementById('addAttStudentNumber').value = '';
+        document.getElementById('addAttSelectedStudent').style.display = 'none';
+        document.getElementById('addAttSelectedName').textContent = '';
+        document.getElementById('addAttSelectedSn').textContent = '';
+    }
+
+    function openAddAttendanceModal(sessionId) {
+        if (_addAttSearchTimer) clearTimeout(_addAttSearchTimer);
+        document.getElementById('addAttSessionId').value = sessionId;
+        document.getElementById('addAttLastNameSearch').value = '';
+        const box = document.getElementById('addAttSearchResults');
+        box.style.display = 'none';
+        box.innerHTML = '';
+        clearAddStudentPick();
+        document.getElementById('addAttStatus').value = 'Time Out';
+        document.getElementById('addAttTimeIn').value = '';
+        document.getElementById('addAttTimeOut').value = '';
+        document.getElementById('addAttFine').value = '0';
+        document.getElementById('addAttReason').value = '';
+        document.getElementById('attendanceAddModal').classList.add('active');
+        lucide.createIcons();
+    }
+
+    function closeAttendanceAddModal() {
+        if (_addAttSearchTimer) clearTimeout(_addAttSearchTimer);
+        document.getElementById('attendanceAddModal').classList.remove('active');
+    }
+
+    function selectAddStudentPick(studentNumber, displayName) {
+        document.getElementById('addAttStudentNumber').value = studentNumber;
+        document.getElementById('addAttSelectedName').textContent = displayName || '';
+        document.getElementById('addAttSelectedSn').textContent = ' · ' + studentNumber;
+        document.getElementById('addAttSelectedStudent').style.display = 'block';
+        document.getElementById('addAttSearchResults').style.display = 'none';
+        document.getElementById('addAttSearchResults').innerHTML = '';
+    }
+
+    async function runAddStudentLastNameSearch() {
+        const sessionId = document.getElementById('addAttSessionId').value;
+        const q = document.getElementById('addAttLastNameSearch').value.trim();
+        const box = document.getElementById('addAttSearchResults');
+        if (!q || q.length < 1) {
+            box.style.display = 'none';
+            box.innerHTML = '';
+            return;
+        }
+        try {
+            const url = '/api/students/search-by-last-name?q=' + encodeURIComponent(q)
+                + '&session_id=' + encodeURIComponent(sessionId)
+                + '&exclude_in_session=1&limit=25';
+            const res = await fetch(url);
+            const data = await res.json();
+            if (!data.success) {
+                box.style.display = 'block';
+                box.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--accent-danger);">' + escapeHtml(data.message || 'Search failed') + '</div>';
+                return;
+            }
+            const list = data.students || [];
+            if (!list.length) {
+                box.style.display = 'block';
+                box.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--text-muted);">No matches.</div>';
+                return;
+            }
+            box.style.display = 'block';
+            box.innerHTML = '';
+            list.forEach(function(s) {
+                const sn = String(s.student_number || '');
+                const nm = String(s.name || '');
+                const meta = [s.course, s.year, s.section].filter(Boolean).join(' · ');
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'add-att-pick';
+                b.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 10px;border:none;border-bottom:1px solid var(--border);background:transparent;cursor:pointer;font-size:13px;color:var(--text-primary);';
+                const strong = document.createElement('strong');
+                strong.textContent = nm;
+                b.appendChild(strong);
+                const spanSn = document.createElement('span');
+                spanSn.style.cssText = 'font-family:monospace;font-size:11px;color:var(--text-muted);margin-left:6px;';
+                spanSn.textContent = ' ' + sn;
+                b.appendChild(spanSn);
+                if (meta) {
+                    const div = document.createElement('div');
+                    div.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:2px;';
+                    div.textContent = meta;
+                    b.appendChild(div);
+                }
+                b.addEventListener('click', function() {
+                    selectAddStudentPick(sn, nm);
+                });
+                box.appendChild(b);
+            });
+        } catch (e) {
+            box.style.display = 'block';
+            box.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--accent-danger);">Network error.</div>';
+        }
+    }
+
+    document.getElementById('addAttLastNameSearch')?.addEventListener('input', function() {
+        if (_addAttSearchTimer) clearTimeout(_addAttSearchTimer);
+        _addAttSearchTimer = setTimeout(runAddStudentLastNameSearch, 320);
+    });
+
+    async function bulkAbsentMissing(sessionId) {
+        if (!confirm('Add Absent rows (with this session’s absent fine) for every required student who still has no attendance row?')) return;
+        try {
+            const res = await fetch(
+                '/api/session/' + encodeURIComponent(sessionId) + '/attendance/bulk-absent-missing',
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+            );
+            const data = await res.json();
+            if (data.success) {
+                showToast(data.message || 'Done.', 'success');
+                setTimeout(function() { location.reload(); }, 700);
+            } else {
+                showToast(data.message || 'Could not add.', 'error');
+            }
+        } catch (e) {
+            showToast('Network error.', 'error');
+        }
+    }
+
+    async function submitAttendanceEdit(e) {
+        e.preventDefault();
+        const sessionId = document.getElementById('editAttSessionId').value;
+        const recordId = parseInt(document.getElementById('editAttRecordId').value, 10);
+        const body = {
+            status: document.getElementById('editAttStatus').value,
+            time_in: document.getElementById('editAttTimeIn').value || null,
+            time_out: document.getElementById('editAttTimeOut').value || null,
+            fine: parseInt(document.getElementById('editAttFine').value, 10) || 0,
+            fine_reason: document.getElementById('editAttReason').value || '',
+        };
+        const submitBtn = document.getElementById('editAttSubmitBtn');
+        submitBtn.disabled = true;
+        try {
+            const res = await fetch(
+                '/api/session/' + encodeURIComponent(sessionId) + '/attendance/' + recordId,
+                { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+            );
+            const data = await res.json();
+            if (data.success) {
+                showToast(data.message || 'Saved.', 'success');
+                closeAttendanceEditModal();
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(data.message || 'Could not save.', 'error');
+            }
+        } catch (err) {
+            showToast('Network error.', 'error');
+        } finally {
+            submitBtn.disabled = false;
+        }
+    }
+
+    async function submitAttendanceAdd(e) {
+        e.preventDefault();
+        const sessionId = document.getElementById('addAttSessionId').value;
+        const sn = document.getElementById('addAttStudentNumber').value.trim();
+        if (!sn) {
+            showToast('Search and select a student first.', 'error');
+            return;
+        }
+        const body = {
+            student_number: sn,
+            status: document.getElementById('addAttStatus').value,
+            time_in: document.getElementById('addAttTimeIn').value || null,
+            time_out: document.getElementById('addAttTimeOut').value || null,
+            fine: parseInt(document.getElementById('addAttFine').value, 10) || 0,
+            fine_reason: document.getElementById('addAttReason').value || '',
+        };
+        const submitBtn = document.getElementById('addAttSubmitBtn');
+        submitBtn.disabled = true;
+        try {
+            const res = await fetch(
+                '/api/session/' + encodeURIComponent(sessionId) + '/attendance',
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+            );
+            const data = await res.json();
+            if (data.success) {
+                showToast(data.message || 'Added.', 'success');
+                closeAttendanceAddModal();
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(data.message || 'Could not add.', 'error');
+            }
+        } catch (err) {
+            showToast('Network error.', 'error');
+        } finally {
+            submitBtn.disabled = false;
+        }
+    }
+
+    document.getElementById('attendanceEditModal')?.addEventListener('click', function(ev) {
+        if (ev.target === this) closeAttendanceEditModal();
+    });
+    document.getElementById('attendanceAddModal')?.addEventListener('click', function(ev) {
+        if (ev.target === this) closeAttendanceAddModal();
     });
 
     lucide.createIcons();

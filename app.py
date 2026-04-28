@@ -18,16 +18,19 @@ from qr_generator import generate_single_qr, batch_generate_from_excel
 from session_manager import (create_session, get_session, get_active_sessions,
                               get_all_sessions, get_session_count, validate_session,
                               record_student_scan, close_session, clear_all_sessions,
-                              delete_session, process_scan, get_session_row)
+                              delete_session, process_scan, get_session_row,
+                              sync_scan_row_from_attendance)
 from db import get_db, _cur
 from excel_logger import (log_attendance, log_absent_students,
                            generate_summary_sheet,
                            get_attendance_records, get_session_stats,
                            create_sample_master_list, clear_attendance_records,
-                           clear_session_records)
+                           clear_session_records,
+                           update_session_attendance_record, add_manual_attendance_record)
 from student_registry import (register_student, register_students_bulk,
                                get_all_students, get_student,
-                               get_students_by_filter, delete_student,
+                               get_students_by_filter, search_students_by_last_name,
+                               delete_student,
                                update_student, clear_registry,
                                get_registry_stats)
 
@@ -464,6 +467,199 @@ def api_session_stats(session_id):
     stats = get_session_stats(session_id)
     session = get_session(session_id)
     return jsonify({'success': True, 'stats': stats, 'session': session})
+
+
+@app.route('/api/session/<session_id>/attendance/<int:record_id>', methods=['PATCH'])
+@login_required
+def api_patch_session_attendance(session_id, record_id):
+    """Update one attendance row for a closed session (correct status, times, fines)."""
+    data = request.get_json(silent=True) or {}
+    allowed_keys = (
+        'status', 'time_in', 'time_out', 'fine', 'fine_reason',
+        'name', 'course', 'year', 'section',
+    )
+    fields = {k: data[k] for k in allowed_keys if k in data}
+    if not fields:
+        return jsonify({'success': False, 'message': 'No valid fields to update.'}), 400
+
+    ok, msg, record = update_session_attendance_record(record_id, session_id, fields)
+    if not ok:
+        return jsonify({'success': False, 'message': msg}), 400
+
+    sync_scan_row_from_attendance(
+        session_id,
+        str(record['student_number']),
+        record['status'],
+        record.get('time_in'),
+        record.get('time_out'),
+        int(record.get('fine') or 0),
+        record.get('fine_reason') or '',
+    )
+    return jsonify({'success': True, 'message': msg, 'record': record})
+
+
+@app.route('/api/session/<session_id>/attendance', methods=['POST'])
+@login_required
+def api_add_session_attendance(session_id):
+    """Add an attendance row for a student with no row yet (closed session only)."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get('student_number') or '').strip()
+    if not sn:
+        return jsonify({'success': False, 'message': 'student_number is required.'}), 400
+
+    student = get_student(sn)
+    if not student or not student.get('student_number'):
+        return jsonify({'success': False, 'message': 'Student not found in registry.'}), 404
+
+    ok, msg, record = add_manual_attendance_record(
+        session_id,
+        student,
+        data.get('status', 'Absent'),
+        data.get('time_in'),
+        data.get('time_out'),
+        data.get('fine', 0),
+        data.get('fine_reason', ''),
+    )
+    if not ok:
+        status_code = 409 if 'already has' in (msg or '').lower() else 400
+        return jsonify({'success': False, 'message': msg}), status_code
+
+    sync_scan_row_from_attendance(
+        session_id,
+        str(record['student_number']),
+        record['status'],
+        record.get('time_in'),
+        record.get('time_out'),
+        int(record.get('fine') or 0),
+        record.get('fine_reason') or '',
+    )
+    return jsonify({'success': True, 'message': msg, 'record': record})
+
+
+@app.route('/api/session/<session_id>/attendance/bulk-absent-missing', methods=['POST'])
+@login_required
+def api_bulk_absent_missing(session_id):
+    """
+    For a closed session with required course/year/section, add Absent rows
+    (with session absent fine) for each required student who has no attendance row yet.
+    """
+    session = get_session(session_id)
+    if not session:
+        return jsonify({'success': False, 'message': 'Session not found.'}), 404
+    if session.get('is_active'):
+        return jsonify({'success': False, 'message': 'Session must be closed.'}), 400
+
+    req_c = session.get('required_course') or None
+    req_y = session.get('required_year') or []
+    if not isinstance(req_y, list):
+        req_y = []
+    req_s = session.get('required_section') or None
+    if not req_c and not req_y and not req_s:
+        return jsonify({
+            'success': False,
+            'message': 'This session has no required attendees filter. Use Add student to add individuals.',
+        }), 400
+
+    year_arg = req_y if len(req_y) > 0 else None
+    required = get_students_by_filter(course=req_c, year=year_arg, section=req_s)
+    if not required:
+        return jsonify({'success': False, 'message': 'No students match this session’s required filter.'}), 400
+
+    existing = {str(r['student_number']) for r in get_attendance_records(session_id=session_id)
+                if r.get('student_number')}
+    fine_absent = session_fine_value(session, 'fine_absent', FINE_ABSENT)
+    default_reason = 'Absent — roster correction (manual bulk)'
+    data = request.get_json(silent=True) or {}
+    fine_reason = (data.get('fine_reason') or '').strip() or default_reason
+
+    added = 0
+    errors = []
+    for stu in required:
+        sn = str(stu.get('student_number', '')).strip()
+        if not sn or sn in existing:
+            continue
+        ok, msg, record = add_manual_attendance_record(
+            session_id, stu, 'Absent', None, None, fine_absent, fine_reason,
+        )
+        if ok and record:
+            sync_scan_row_from_attendance(
+                session_id, sn, record['status'],
+                record.get('time_in'), record.get('time_out'),
+                int(record.get('fine') or 0), record.get('fine_reason') or '',
+            )
+            existing.add(sn)
+            added += 1
+        else:
+            errors.append(f'{sn}: {msg}')
+
+    if added == 0 and errors:
+        return jsonify({
+            'success': False,
+            'message': errors[0],
+            'added': 0,
+            'errors': errors[:10],
+        }), 400
+
+    msg = f'Added {added} absent record(s) for students missing from this session.'
+    if errors:
+        msg += f' ({len(errors)} skipped.)'
+    return jsonify({
+        'success': True,
+        'message': msg,
+        'added': added,
+        'errors': errors[:20],
+    })
+
+
+@app.route('/api/students/search-by-last-name', methods=['GET'])
+@login_required
+def api_search_students_by_last_name():
+    """Search students by last name (or name substring); optional session scope and exclusions."""
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'success': True, 'students': []})
+
+    try:
+        lim = min(50, max(1, int(request.args.get('limit', 25))))
+    except (TypeError, ValueError):
+        lim = 25
+
+    session_id = (request.args.get('session_id') or '').strip()
+    exclude_in = request.args.get('exclude_in_session', '1').lower() in ('1', 'true', 'yes')
+
+    allowed_numbers = None
+    exclude_numbers = None
+
+    if session_id:
+        sess = get_session(session_id)
+        if not sess:
+            return jsonify({'success': False, 'message': 'Session not found.'}), 404
+        rc = sess.get('required_course') or None
+        ry = sess.get('required_year') or []
+        if not isinstance(ry, list):
+            ry = []
+        rs = sess.get('required_section') or None
+        if rc or ry or rs:
+            pool = get_students_by_filter(
+                course=rc,
+                year=ry if len(ry) > 0 else None,
+                section=rs,
+            )
+            allowed_numbers = [str(s['student_number']) for s in pool if s.get('student_number')]
+
+        if exclude_in:
+            exclude_numbers = list({
+                str(r['student_number'])
+                for r in get_attendance_records(session_id=session_id)
+                if r.get('student_number')
+            })
+
+    students = search_students_by_last_name(
+        q, lim,
+        allowed_numbers=allowed_numbers,
+        exclude_numbers=exclude_numbers,
+    )
+    return jsonify({'success': True, 'students': students})
 
 
 @app.route('/api/scan', methods=['POST'])

@@ -285,7 +285,7 @@
                         <th>Fines (L/P/A)</th>
                         <th>Count</th>
                         <th>Status</th>
-                        <th style="width:60px;text-align:center;">Action</th>
+                        <th style="width:120px;text-align:center;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -319,9 +319,16 @@
                             {% endif %}
                         </td>
                         <td style="text-align:center;">
-                            <button class="btn btn-sm btn-danger" onclick="deleteSession('{{ sess.session_id }}', '{{ sess.subject|e }}')" title="Delete session" style="padding:4px 8px;min-width:unset;">
-                                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
-                            </button>
+                            <div style="display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:center;">
+                                {% if not sess.is_active %}
+                                <a href="{{ url_for('records_page') }}?session_id={{ sess.session_id|urlencode }}" class="btn btn-sm btn-outline" title="View and edit attendance" style="padding:4px 8px;min-width:unset;text-decoration:none;">
+                                    <i data-lucide="table" style="width:14px;height:14px;"></i>
+                                </a>
+                                {% endif %}
+                                <button class="btn btn-sm btn-danger" onclick="deleteSession('{{ sess.session_id }}', '{{ sess.subject|e }}')" title="Delete session" style="padding:4px 8px;min-width:unset;">
+                                    <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
