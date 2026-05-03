@@ -114,12 +114,12 @@
                 </button>
                 <div id="export-dropdown" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);z-index:50;min-width:260px;max-height:320px;overflow-y:auto;">
                     <div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Export by Session</div>
-                    <a href="/api/records/download" class="export-dropdown-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-input)'" onmouseout="this.style.background='transparent'">
+                    <a href="/api/records/download{% if export_qs_no_session %}?{{ export_qs_no_session | safe }}{% endif %}" class="export-dropdown-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-input)'" onmouseout="this.style.background='transparent'">
                         <i data-lucide="layers" style="width:14px;height:14px;color:var(--accent-primary);flex-shrink:0;"></i>
                         <span style="font-weight:600;">All Sessions</span>
                     </a>
                     {% for session in all_sessions %}
-                    <a href="/api/records/download?session_id={{ session.session_id }}" class="export-dropdown-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);text-decoration:none;" onmouseover="this.style.background='var(--bg-input)'" onmouseout="this.style.background='transparent'">
+                    <a href="/api/records/download?session_id={{ session.session_id | urlencode }}{% if export_qs_no_session %}&amp;{{ export_qs_no_session | safe }}{% endif %}" class="export-dropdown-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary);text-decoration:none;" onmouseover="this.style.background='var(--bg-input)'" onmouseout="this.style.background='transparent'">
                         <i data-lucide="calendar-clock" style="width:14px;height:14px;color:var(--text-muted);flex-shrink:0;"></i>
                         <div style="overflow:hidden;">
                             <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ session.subject or 'Untitled Session' }}</div>
@@ -163,6 +163,35 @@
                     <label class="form-label">Date To</label>
                     <input type="date" class="form-input" name="date_to" id="filterDateTo"
                            value="{{ filters.date_to }}">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" name="status" id="filterStatus">
+                        <option value="" {% if not filters.status %}selected{% endif %}>All statuses</option>
+                        <option value="Time In" {% if filters.status == 'Time In' %}selected{% endif %}>Time In</option>
+                        <option value="Time Out" {% if filters.status == 'Time Out' %}selected{% endif %}>Time Out</option>
+                        <option value="Absent" {% if filters.status == 'Absent' %}selected{% endif %}>Absent</option>
+                        <option value="Late" {% if filters.status == 'Late' %}selected{% endif %}>Late</option>
+                        <option value="Present" {% if filters.status == 'Present' %}selected{% endif %}>Present</option>
+                        <option value="Partial (No Time Out)" {% if filters.status == 'Partial (No Time Out)' %}selected{% endif %}>Partial (No Time Out)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Course</label>
+                    <input type="text" class="form-input" name="course" id="filterCourse"
+                           placeholder="Contains…" value="{{ filters.course }}" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Year</label>
+                    <input type="text" class="form-input" name="year" id="filterYear"
+                           placeholder="e.g. 1" value="{{ filters.year }}" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Section</label>
+                    <input type="text" class="form-input" name="section" id="filterSection"
+                           placeholder="Contains…" value="{{ filters.section }}" autocomplete="off">
                 </div>
             </div>
             <div style="display:flex;gap:6px;">
@@ -352,7 +381,7 @@
                 <i data-lucide="file-x"></i>
                 <h3>No Records Found</h3>
                 <p>
-                    {% if filters.session_id or filters.student_number or filters.date_from or filters.date_to %}
+                    {% if filters.session_id or filters.student_number or filters.date_from or filters.date_to or filters.status or filters.course or filters.year or filters.section %}
                         No records match your filters. Try adjusting or clearing.
                     {% else %}
                         Records will appear here after scanning QR codes.

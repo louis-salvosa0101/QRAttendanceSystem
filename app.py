@@ -6,6 +6,7 @@ import io
 import json
 import zipfile
 from datetime import datetime
+from urllib.parse import urlencode
 from flask import (Flask, render_template, request, jsonify, redirect,
                    url_for, flash, send_from_directory, send_file)
 from flask_login import login_required, login_user, logout_user, current_user
@@ -231,32 +232,64 @@ def generate_page():
     return render_template('generate.html', qr_files=qr_files)
 
 
+def _records_filter_params():
+    """Current GET query values for the records page (strip whitespace)."""
+    keys = (
+        'session_id', 'student_number', 'date_from', 'date_to',
+        'status', 'course', 'year', 'section',
+    )
+    return {k: (request.args.get(k, '') or '').strip() for k in keys}
+
+
+def _records_export_qs_excluding_session():
+    """Query string for export links: all active filters except session (for “all sessions” export)."""
+    p = _records_filter_params()
+    d = {k: p[k] for k in p if k != 'session_id' and p[k]}
+    return urlencode(d)
+
+
 @app.route('/records')
 @login_required
 def records_page():
     """Attendance records page."""
-    session_id = request.args.get('session_id', '')
-    student_number = request.args.get('student_number', '')
-    date_from = request.args.get('date_from', '')
-    date_to = request.args.get('date_to', '')
+    p = _records_filter_params()
+    session_id = p['session_id']
+    student_number = p['student_number']
+    date_from = p['date_from']
+    date_to = p['date_to']
+    status = p['status']
+    course = p['course']
+    year = p['year']
+    section = p['section']
 
     records = get_attendance_records(
         session_id=session_id or None,
         student_number=student_number or None,
         date_from=date_from or None,
-        date_to=date_to or None
+        date_to=date_to or None,
+        status=status or None,
+        course=course or None,
+        year=year or None,
+        section=section or None,
     )
 
     all_sessions = get_all_sessions()
 
+    export_qs_no_session = _records_export_qs_excluding_session()
+
     return render_template('records.html',
                            records=records,
                            all_sessions=all_sessions,
+                           export_qs_no_session=export_qs_no_session,
                            filters={
                                'session_id': session_id,
                                'student_number': student_number,
                                'date_from': date_from,
-                               'date_to': date_to
+                               'date_to': date_to,
+                               'status': status,
+                               'course': course,
+                               'year': year,
+                               'section': section,
                            })
 
 
@@ -1644,16 +1677,24 @@ def api_student_fines_summary():
 @login_required
 def api_download_records():
     """Download the attendance records as Excel (supports filters)."""
-    session_id = request.args.get('session_id', '')
-    student_number = request.args.get('student_number', '')
-    date_from = request.args.get('date_from', '')
-    date_to = request.args.get('date_to', '')
+    session_id = (request.args.get('session_id', '') or '').strip()
+    student_number = (request.args.get('student_number', '') or '').strip()
+    date_from = (request.args.get('date_from', '') or '').strip()
+    date_to = (request.args.get('date_to', '') or '').strip()
+    status = (request.args.get('status', '') or '').strip()
+    course = (request.args.get('course', '') or '').strip()
+    year = (request.args.get('year', '') or '').strip()
+    section = (request.args.get('section', '') or '').strip()
 
     records = get_attendance_records(
         session_id=session_id or None,
         student_number=student_number or None,
         date_from=date_from or None,
-        date_to=date_to or None
+        date_to=date_to or None,
+        status=status or None,
+        course=course or None,
+        year=year or None,
+        section=section or None,
     )
 
     # Build session_id -> session name lookup

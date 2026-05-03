@@ -118,34 +118,6 @@
         {% endif %}
     </div>
 </div>
-
-<!-- System Info -->
-<div class="card">
-    <div class="card-header">
-        <div class="card-title">
-            <i data-lucide="shield-check"></i>
-            System Info
-        </div>
-    </div>
-    <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
-            <div style="padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
-                <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:4px;">Encryption</div>
-                <div style="font-size:13px;font-weight:600;color:var(--text-primary);">AES-256-CBC</div>
-            </div>
-            <div style="padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
-                <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:4px;">Database</div>
-                <div style="font-size:13px;font-weight:600;color:var(--text-primary);">PostgreSQL</div>
-            </div>
-            <div style="padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);">
-                <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:4px;">Status</div>
-                <div style="font-size:13px;font-weight:600;color:var(--accent-success);display:flex;align-items:center;gap:4px;">
-                    <i data-lucide="check-circle" style="width:14px;height:14px;"></i> Online
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}

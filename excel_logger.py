@@ -292,7 +292,9 @@ def generate_summary_sheet(filepath: str = None) -> bool:
 
 
 def get_attendance_records(session_id: str = None, student_number: str = None,
-                           date_from: str = None, date_to: str = None) -> list:
+                           date_from: str = None, date_to: str = None,
+                           status: str = None, course: str = None,
+                           year: str = None, section: str = None) -> list:
     """
     Retrieve attendance records from PostgreSQL with optional filters.
     """
@@ -310,6 +312,31 @@ def get_attendance_records(session_id: str = None, student_number: str = None,
     if date_to:
         conditions.append("ar.recorded_at <= %s")
         params.append(date_to + " 23:59:59")
+    if status:
+        st = status.strip()
+        # "Late" is not usually stored as status: lateness is a late fine on Time In/Out rows.
+        if st == "Late":
+            # Session lateness is stored as Time In/Out with fine_reason "Late by … min…", not status='Late'.
+            # Prefix matches session_manager (excludes partial "considered late" wording).
+            conditions.append(
+                """(
+    TRIM(COALESCE(ar.status, '')) = 'Late'
+    OR (
+        COALESCE(ar.fine, 0) > 0
+        AND ar.fine_reason IS NOT NULL
+        AND ar.fine_reason ILIKE %s
+    )
+)"""
+            )
+            params.append("late by%")
+        else:
+            conditions.append("TRIM(COALESCE(ar.status, '')) = %s")
+            params.append(st)
+    _ilike_contains('ar.course', course, params, conditions)
+    if year:
+        conditions.append("ar.year = %s")
+        params.append(year.strip())
+    _ilike_contains('ar.section', section, params, conditions)
 
     where = " AND ".join(conditions) if conditions else "1=1"
     query = (
@@ -330,6 +357,20 @@ def get_attendance_records(session_id: str = None, student_number: str = None,
 
 
 ALLOWED_EDIT_STATUSES = frozenset({'Time In', 'Time Out', 'Absent', 'Partial (No Time Out)'})
+
+
+def _ilike_contains(column_sql: str, raw: str, params: list, conditions: list) -> None:
+    """Add ILIKE %…% with ESCAPE so user % and _ are literal."""
+    if not raw or not str(raw).strip():
+        return
+    frag = (
+        str(raw).strip()
+        .replace('\\', '\\\\')
+        .replace('%', '\\%')
+        .replace('_', '\\_')
+    )
+    conditions.append(f"{column_sql} ILIKE %s ESCAPE '\\'")
+    params.append(f'%{frag}%')
 
 
 def _dt_empty(value) -> bool:
