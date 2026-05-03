@@ -181,7 +181,10 @@
                         {% for f in fines_list %}
                         <tr data-attendance-fine-row="{{ f.id }}">
                             <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ f.date|fmt_dt }}</td>
-                            <td><span class="badge badge-info" style="font-size:10px;">{{ f.session_id }}</span></td>
+                            <td>
+                                <span style="font-weight:600;font-size:12px;color:var(--text-primary);"
+                                      title="{% if f.session_id %}Session ID: {{ f.session_id }}{% endif %}">{{ f.session_name }}</span>
+                            </td>
                             <td>
                                 {% if f.status == 'Absent' %}<span class="badge badge-danger">Absent</span>
                                 {% elif 'Partial' in f.status %}<span class="badge badge-warning">Partial</span>
@@ -396,7 +399,12 @@
                     {% for r in records|reverse %}
                     <tr data-attendance-fine-row="{{ r.id }}">
                         <td style="font-size:12px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.datetime|fmt_dt }}</td>
-                        <td><span class="badge badge-info" style="font-size:10px;">{{ r.session_id }}</span></td>
+                        <td>
+                            <span style="font-weight:600;font-size:12px;color:var(--text-primary);"
+                                  title="{% if r.session_id %}Session ID: {{ r.session_id }}{% endif %}">
+                                {{ r.session_subject or r.session_notes or r.session_id or '—' }}
+                            </span>
+                        </td>
                         <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.time_in|fmt_dt }}</td>
                         <td style="font-size:11px;font-family:'Inter',monospace;white-space:nowrap;">{{ r.time_out|fmt_dt }}</td>
                         <td>

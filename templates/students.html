@@ -218,12 +218,81 @@
             <i data-lucide="list"></i>
             Student List
         </div>
-        <span class="badge badge-info">{{ students|length }} students</span>
+        <span class="badge badge-info" id="studentListBadge">{{ students|length }} students</span>
     </div>
+    {% if students %}
+    {% set fo = namespace(courses=[], years=[], sections=[], no_course=false, no_section=false) %}
+    {% for s in students %}
+        {% set c = (s.course or '')|trim %}
+        {% if not c %}
+            {% set fo.no_course = true %}
+        {% elif c not in fo.courses %}
+            {% set _ = fo.courses.append(c) %}
+        {% endif %}
+        {% if s.year is not none and (s.year|string)|trim != '' %}
+            {% set ys = s.year|string|trim %}
+            {% if ys not in fo.years %}
+                {% set _ = fo.years.append(ys) %}
+            {% endif %}
+        {% endif %}
+        {% set sec = (s.section or '')|trim %}
+        {% if not sec %}
+            {% set fo.no_section = true %}
+        {% elif sec not in fo.sections %}
+            {% set _ = fo.sections.append(sec) %}
+        {% endif %}
+    {% endfor %}
+    {% set fo.courses = fo.courses|sort %}
+    {% set fo.years = fo.years|sort %}
+    {% set fo.sections = fo.sections|sort %}
     <div class="card-body" style="border-bottom:1px solid var(--border);padding-top:10px;padding-bottom:10px;">
-        <input type="text" id="searchInput" class="form-input" style="max-width:320px;"
-               placeholder="Search name, number, or course..." oninput="filterTable()">
+        <div class="form-row" style="align-items:end;flex-wrap:wrap;gap:10px 16px;">
+            <div class="form-group" style="margin-bottom:0;min-width:180px;flex:1 1 160px;">
+                <label class="form-label" style="display:flex;align-items:center;gap:4px;">
+                    <i data-lucide="search" style="width:12px;height:12px;"></i>Search
+                </label>
+                <input type="text" id="searchInput" class="form-input" style="max-width:100%;"
+                       placeholder="Name, number, course…" oninput="applyStudentListFilters()">
+            </div>
+            <div class="form-group" style="margin-bottom:0;min-width:130px;flex:0 1 120px;">
+                <label class="form-label" style="display:flex;align-items:center;gap:4px;">
+                    <i data-lucide="graduation-cap" style="width:12px;height:12px;"></i>Course
+                </label>
+                <select class="form-select" id="filterCourse" onchange="applyStudentListFilters()">
+                    <option value="">All</option>
+                    {% if fo.no_course %}<option value="__none__">(No course)</option>{% endif %}
+                    {% for c in fo.courses %}<option value="{{ c|e }}">{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;min-width:100px;flex:0 1 90px;">
+                <label class="form-label" style="display:flex;align-items:center;gap:4px;">
+                    <i data-lucide="calendar" style="width:12px;height:12px;"></i>Year
+                </label>
+                <select class="form-select" id="filterYear" onchange="applyStudentListFilters()">
+                    <option value="">All</option>
+                    {% for y in fo.years %}<option value="{{ y|e }}">{{ y }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;min-width:100px;flex:0 1 90px;">
+                <label class="form-label" style="display:flex;align-items:center;gap:4px;">
+                    <i data-lucide="layout-grid" style="width:12px;height:12px;"></i>Section
+                </label>
+                <select class="form-select" id="filterSection" onchange="applyStudentListFilters()">
+                    <option value="">All</option>
+                    {% if fo.no_section %}<option value="__none__">(No section)</option>{% endif %}
+                    {% for sec in fo.sections %}<option value="{{ sec|e }}">{{ sec }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;flex:0 0 auto;">
+                <label class="form-label" style="visibility:hidden;">Reset</label>
+                <button type="button" class="btn btn-outline btn-sm" id="btnClearStudentFilters" onclick="clearStudentListFilters()">
+                    <i data-lucide="x-circle" style="width:14px;height:14px;"></i>
+                    Clear
+                </button>
+            </div>
+        </div>
     </div>
+    {% endif %}
     <div class="card-body" style="padding:0;">
         {% if students %}
         <div class="table-container">
@@ -241,7 +310,10 @@
                 </thead>
                 <tbody id="studentsTableBody">
                     {% for student in students %}
-                    <tr id="row-{{ loop.index }}" style="cursor:pointer;" onclick="window.location='/students/{{ student.student_number }}'">
+                    <tr id="row-{{ loop.index }}" style="cursor:pointer;" onclick="window.location='/students/{{ student.student_number }}'"
+                        data-course="{{ (student.course or '')|e }}"
+                        data-year="{% if student.year is not none %}{{ student.year }}{% endif %}"
+                        data-section="{{ (student.section or '')|e }}">
                         <td style="color:var(--text-muted);font-size:12px;">{{ loop.index }}</td>
                         <td style="font-weight:600;color:var(--accent-primary);">
                             <a href="/students/{{ student.student_number }}" style="color:inherit;text-decoration:none;" onclick="event.stopPropagation();">{{ student.name }}</a>
@@ -537,12 +609,57 @@
         }
     }
 
-    function filterTable() {
-        const query = document.getElementById('searchInput').value.toLowerCase();
+    const STUDENT_LIST_TOTAL = {{ students|length if students else 0 }};
+
+    function applyStudentListFilters() {
+        const searchEl = document.getElementById('searchInput');
+        const query = (searchEl && searchEl.value || '').toLowerCase().trim();
+        const courseVal = (document.getElementById('filterCourse') || {}).value || '';
+        const yearVal = (document.getElementById('filterYear') || {}).value || '';
+        const sectionVal = (document.getElementById('filterSection') || {}).value || '';
+
         const rows = document.querySelectorAll('#studentsTable tbody tr');
+        let visible = 0;
         rows.forEach(row => {
-            row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
+            const textOk = !query || row.innerText.toLowerCase().includes(query);
+
+            const dc = (row.dataset.course || '').trim();
+            let courseOk = true;
+            if (courseVal === '__none__') courseOk = !dc;
+            else if (courseVal) courseOk = dc.toLowerCase() === courseVal.toLowerCase();
+
+            const dy = (row.dataset.year || '').trim();
+            let yearOk = true;
+            if (yearVal) yearOk = dy === yearVal;
+
+            const ds = (row.dataset.section || '').trim();
+            let sectionOk = true;
+            if (sectionVal === '__none__') sectionOk = !ds;
+            else if (sectionVal) sectionOk = ds.toLowerCase() === sectionVal.toLowerCase();
+
+            const show = textOk && courseOk && yearOk && sectionOk;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
         });
+
+        const badge = document.getElementById('studentListBadge');
+        if (badge && STUDENT_LIST_TOTAL) {
+            badge.textContent = visible === STUDENT_LIST_TOTAL
+                ? `${STUDENT_LIST_TOTAL} students`
+                : `${visible} of ${STUDENT_LIST_TOTAL} students`;
+        }
+    }
+
+    function clearStudentListFilters() {
+        const si = document.getElementById('searchInput');
+        if (si) si.value = '';
+        const fc = document.getElementById('filterCourse');
+        if (fc) fc.value = '';
+        const fy = document.getElementById('filterYear');
+        if (fy) fy.value = '';
+        const fs = document.getElementById('filterSection');
+        if (fs) fs.value = '';
+        applyStudentListFilters();
     }
 
     lucide.createIcons();

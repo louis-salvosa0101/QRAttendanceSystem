@@ -100,6 +100,19 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _attendance_fine_session_label(record: dict, session_id: str | None) -> str:
+    """
+    Human-readable session label for UI: subject (class/event name), else notes, else id.
+    *record* should come from get_attendance_records (includes session_subject, session_notes from JOIN).
+    """
+    for key in ('session_subject', 'session_notes'):
+        v = (record.get(key) or '').strip()
+        if v:
+            return v
+    sid = (session_id or '').strip()
+    return sid if sid else '—'
+
+
 # ─── AUTH ROUTES ──────────────────────────────────────────────────────────
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -305,10 +318,12 @@ def student_detail_page(student_number):
             partial_count += 1
         if fine > 0:
             late_count += 1
+            name_from_record = _attendance_fine_session_label(r, sess_id)
             fines_list.append({
                 'id': r.get('id'),
                 'date': r.get('datetime', ''),
                 'session_id': sess_id,
+                'session_name': name_from_record,
                 'status': status,
                 'fine': fine,
                 'reason': r.get('fine_reason', ''),

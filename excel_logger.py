@@ -299,23 +299,26 @@ def get_attendance_records(session_id: str = None, student_number: str = None,
     params = []
     conditions = []
     if session_id:
-        conditions.append("session_id = %s")
+        conditions.append("ar.session_id = %s")
         params.append(session_id)
     if student_number:
-        conditions.append("student_number = %s")
+        conditions.append("ar.student_number = %s")
         params.append(student_number)
     if date_from:
-        conditions.append("recorded_at >= %s")
+        conditions.append("ar.recorded_at >= %s")
         params.append(date_from + " 00:00:00")
     if date_to:
-        conditions.append("recorded_at <= %s")
+        conditions.append("ar.recorded_at <= %s")
         params.append(date_to + " 23:59:59")
 
     where = " AND ".join(conditions) if conditions else "1=1"
     query = (
-        f"SELECT id, recorded_at as datetime, name, student_number, course, year, section, "
-        f"session_id, status, fine, fine_reason, time_in, time_out "
-        f"FROM attendance_records WHERE {where} ORDER BY recorded_at"
+        "SELECT ar.id, ar.recorded_at AS datetime, ar.name, ar.student_number, ar.course, "
+        "ar.year, ar.section, ar.session_id, ar.status, ar.fine, ar.fine_reason, ar.time_in, ar.time_out, "
+        "s.subject AS session_subject, s.notes AS session_notes "
+        "FROM attendance_records ar "
+        "LEFT JOIN sessions s ON s.session_id = ar.session_id "
+        f"WHERE {where} ORDER BY ar.recorded_at"
     )
 
     with get_db() as conn:
