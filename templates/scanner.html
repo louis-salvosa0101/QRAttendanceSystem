@@ -11,6 +11,10 @@
         gap: 16px;
         align-items: start;
     }
+    /* Grid items default to min-width:auto; long error text otherwise widens the column and the scanner resizes */
+    .scanner-layout > * {
+        min-width: 0;
+    }
     @media (max-width: 900px) {
         .scanner-layout { grid-template-columns: 1fr; }
     }
@@ -206,6 +210,13 @@
                 errorMsg = 'Camera blocked: Mobile browsers require HTTPS for camera access. Use ngrok or check SETUP_GUIDE.md.';
             }
             showToast(errorMsg, 'error');
+            if (html5QrCode) {
+                try { await html5QrCode.stop(); } catch (e) { /* never started or already stopped */ }
+                try { html5QrCode.clear(); } catch (e) {}
+                html5QrCode = null;
+            }
+            const qrEl = document.getElementById('qr-reader');
+            if (qrEl) qrEl.remove();
             placeholder.style.display = 'flex';
         }
     }

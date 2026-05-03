@@ -11,7 +11,7 @@
         align-items: flex-start;
     }
     .reg-scanner-cam { flex: 0 0 240px; }
-    .reg-scanner-result { flex: 1; min-width: 200px; }
+    .reg-scanner-result { flex: 1 1 200px; min-width: 0; }
     @media (max-width: 600px) {
         .reg-scanner-cam { flex: 0 0 100%; }
         .reg-scanner-result { flex: 0 0 100%; }
@@ -320,6 +320,11 @@
 
         } catch (err) {
             console.error(err);
+            if (registryQr) {
+                try { await registryQr.stop(); } catch (e) {}
+                try { registryQr.clear(); } catch (e) {}
+                registryQr = null;
+            }
             placeholder.style.display = 'flex';
             overlay.style.display = 'none';
             let msg = 'Failed to access camera.';
