@@ -161,7 +161,7 @@
         <div class="qr-grid" id="qrGallery">
             {% if qr_files %}
                 {% for file in qr_files %}
-                <div class="qr-card">
+                <div class="qr-card" data-filename="{{ file }}" style="cursor:pointer;">
                     <img src="/qrcodes/{{ file }}" alt="{{ file }}" loading="lazy">
                     <div class="qr-card-name">{{ file }}</div>
                 </div>
@@ -173,6 +173,34 @@
                     <p>Generate QR codes above to see them here.</p>
                 </div>
             {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Generate QR Preview Modal -->
+<div class="modal-overlay" id="generateQrModal">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i data-lucide="qr-code" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;color:var(--accent-primary);"></i>
+                QR Code Preview
+            </h3>
+            <button class="modal-close" onclick="closeGenerateQrModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body" style="text-align:center;">
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:220px;background:var(--bg-input);border-radius:var(--radius-md);padding:16px;margin-bottom:14px;">
+                <img id="generateQrModalImg" src="" alt="QR Code Preview"
+                     style="max-width:240px;width:100%;height:auto;border-radius:var(--radius-sm);border:1px solid var(--border);background:white;padding:8px;">
+            </div>
+            <div style="margin-bottom:16px;">
+                <div style="font-family:'Inter',monospace;font-size:13px;font-weight:600;color:var(--text-primary);" id="generateQrModalFilename"></div>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <a id="generateQrModalDownload" href="" download class="btn btn-sm btn-primary">
+                    <i data-lucide="download"></i>
+                    Download QR
+                </a>
+            </div>
         </div>
     </div>
 </div>
@@ -279,7 +307,7 @@
                     gallery.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><i data-lucide="image"></i><h3>No QR Codes</h3><p>Generate QR codes above.</p></div>`;
                 } else {
                     gallery.innerHTML = result.files.map(file => `
-                        <div class="qr-card">
+                        <div class="qr-card" data-filename="${file}" style="cursor:pointer;">
                             <img src="/qrcodes/${file}?t=${Date.now()}" alt="${file}" loading="lazy">
                             <div class="qr-card-name">${file}</div>
                         </div>
@@ -303,6 +331,55 @@
             showToast('Error.', 'error');
         }
     }
+
+    function openGenerateQrModal(filename) {
+        const modal = document.getElementById('generateQrModal');
+        const img = document.getElementById('generateQrModalImg');
+        const nameEl = document.getElementById('generateQrModalFilename');
+        const downloadBtn = document.getElementById('generateQrModalDownload');
+
+        if (!modal || !img || !nameEl || !downloadBtn) return;
+
+        const qrUrl = `/qrcodes/${filename}`;
+        img.src = qrUrl;
+        img.alt = filename;
+        nameEl.textContent = filename;
+        downloadBtn.href = qrUrl;
+        downloadBtn.setAttribute('download', filename);
+
+        modal.classList.add('active');
+        lucide.createIcons();
+    }
+
+    function closeGenerateQrModal() {
+        const modal = document.getElementById('generateQrModal');
+        if (modal) {
+            modal.classList.remove('active');
+        }
+    }
+
+    document.getElementById('generateQrModal')?.addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeGenerateQrModal();
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('generateQrModal')?.classList.contains('active')) {
+            closeGenerateQrModal();
+        }
+    });
+
+    // Event delegation for gallery item clicks (static and dynamically refreshed items)
+    document.getElementById('qrGallery')?.addEventListener('click', function(e) {
+        const card = e.target.closest('.qr-card');
+        if (card) {
+            const filename = card.getAttribute('data-filename') || card.querySelector('.qr-card-name')?.textContent?.trim();
+            if (filename) {
+                openGenerateQrModal(filename);
+            }
+        }
+    });
 
     lucide.createIcons();
 </script>
