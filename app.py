@@ -1255,6 +1255,40 @@ def api_delete_manual_fine(student_number, fine_id):
     })
 
 
+@app.route('/api/students/fines/clear-all', methods=['DELETE'])
+@login_required
+def api_clear_all_student_fines():
+    """Clear and reset all fines across all students (attendance fines, session scans, manual fines, and payments)."""
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            """UPDATE attendance_records
+               SET fine = 0,
+                   fine_reason = CASE WHEN COALESCE(fine, 0) > 0 THEN 'Waived' ELSE fine_reason END
+               WHERE COALESCE(fine, 0) > 0"""
+        )
+        attendance_fines_cleared = cur.rowcount
+        cur.execute(
+            """UPDATE session_scans
+               SET fine = 0,
+                   fine_reason = CASE WHEN COALESCE(fine, 0) > 0 THEN 'Waived' ELSE fine_reason END
+               WHERE COALESCE(fine, 0) > 0"""
+        )
+        scans_cleared = cur.rowcount
+        cur.execute("DELETE FROM manual_fines")
+        manual_fines_deleted = cur.rowcount
+        cur.execute("DELETE FROM fine_payments")
+        payments_deleted = cur.rowcount
+
+    return jsonify({
+        'success': True,
+        'message': (
+            f'All student fines cleared: {attendance_fines_cleared} attendance fine(s) waived, '
+            f'{manual_fines_deleted} manual fine(s) removed, {payments_deleted} fine payment(s) cleared.'
+        )
+    })
+
+
 @app.route('/api/students/<student_number>/fines/clear', methods=['DELETE'])
 @login_required
 def api_clear_manual_fines(student_number):

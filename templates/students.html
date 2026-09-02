@@ -202,10 +202,16 @@
 
             <div style="border-top:1px solid var(--border);padding-top:12px;">
                 <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Danger Zone</div>
-                <button class="btn btn-sm btn-danger" onclick="clearAllStudents()" id="btn-clear-students">
-                    <i data-lucide="trash-2"></i>
-                    Clear All Students
-                </button>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-danger" onclick="clearAllStudents()" id="btn-clear-students">
+                        <i data-lucide="trash-2"></i>
+                        Clear All Students
+                    </button>
+                    <button class="btn btn-sm btn-outline" style="border-color:var(--accent-danger);color:var(--accent-danger);" onclick="clearAllFines()" id="btn-clear-all-fines">
+                        <i data-lucide="circle-slash"></i>
+                        Clear All Fines
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -606,6 +612,22 @@
             }
         } catch(err) {
             showToast('Error clearing students.', 'error');
+        }
+    }
+
+    async function clearAllFines() {
+        if (!confirm('Are you sure you want to clear and reset ALL recorded fines for all students? This cannot be undone.')) return;
+        try {
+            const response = await fetch('/api/students/fines/clear-all', { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message, 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch(err) {
+            showToast('Error clearing fines.', 'error');
         }
     }
 
