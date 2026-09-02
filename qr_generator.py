@@ -11,6 +11,14 @@ from crypto_utils import encrypt_qr_data, generate_data_hash
 from config import QR_CODES_DIR
 
 
+def get_qr_filepath(student_number: str, output_dir: str = None) -> str:
+    """Return the expected filepath for a student's QR PNG without generating it."""
+    if output_dir is None:
+        output_dir = QR_CODES_DIR
+    safe_name = student_number.replace(' ', '_').replace('/', '-')
+    return os.path.join(output_dir, f"QR_{safe_name}.png")
+
+
 def generate_single_qr(student_data: dict, output_dir: str = None) -> str:
     """
     Generate a single QR code for a student.
@@ -76,9 +84,7 @@ def generate_single_qr(student_data: dict, output_dir: str = None) -> str:
     draw.text(((card_width - id_w) // 2, label_y + 25), id_text, fill="#555555", font=font_small)
 
     # Save
-    safe_name = student_data['student_number'].replace(' ', '_').replace('/', '-')
-    filename = f"QR_{safe_name}.png"
-    filepath = os.path.join(output_dir, filename)
+    filepath = get_qr_filepath(student_data['student_number'], output_dir)
     card.save(filepath)
 
     return filepath

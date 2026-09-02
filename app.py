@@ -15,7 +15,7 @@ from config import (SECRET_KEY, QR_CODES_DIR, EXCEL_DIR, MASTER_LIST_DIR,
                     ATTENDANCE_LOG_FILE, FINE_LATE, FINE_ABSENT, FINE_PARTIAL,
                     LATE_THRESHOLD_MINUTES, ph_now, session_fine_value)
 from crypto_utils import decrypt_qr_data
-from qr_generator import generate_single_qr, batch_generate_from_excel
+from qr_generator import generate_single_qr, batch_generate_from_excel, get_qr_filepath
 from session_manager import (create_session, get_session, get_active_sessions,
                               get_all_sessions, get_session_count, validate_session,
                               record_student_scan, close_session, clear_all_sessions,
@@ -1048,9 +1048,7 @@ def api_student_qr(student_number):
     if not student:
         return jsonify({'success': False, 'message': 'Student not found.'}), 404
 
-    safe_name = student_number.replace(' ', '_').replace('/', '-')
-    filename = f"QR_{safe_name}.png"
-    filepath = os.path.join(QR_CODES_DIR, filename)
+    filepath = get_qr_filepath(student_number)
 
     if not os.path.exists(filepath):
         generate_single_qr(student)
