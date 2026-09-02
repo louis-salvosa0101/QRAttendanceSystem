@@ -599,7 +599,7 @@
             </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;">
                 <button type="button" class="btn btn-sm btn-outline" onclick="closeQrModal()">Close</button>
-                <a id="qrModalDownloadBtn" href="/api/students/{{ student.student_number }}/qr" download="QR_{{ student.student_number }}.png" class="btn btn-sm btn-primary">
+                <a id="qrModalDownloadBtn" href="/api/students/{{ student.student_number|urlencode }}/qr" download="QR_{{ student.student_number }}.png" class="btn btn-sm btn-primary">
                     <i data-lucide="download"></i>
                     Download
                 </a>
@@ -831,7 +831,7 @@
         const dlBtn = document.getElementById('qrModalDownloadBtn');
 
         err.classList.add('hidden');
-        img.style.display = 'block';
+        img.style.display = 'none';
         if (dlBtn) dlBtn.style.display = 'inline-flex';
 
         const qrUrl = `/api/students/${encodeURIComponent(STUDENT_NUMBER)}/qr`;
