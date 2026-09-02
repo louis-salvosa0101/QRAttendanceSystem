@@ -1035,6 +1035,29 @@ def api_delete_student(student_number):
     })
 
 
+@app.route('/api/students/<student_number>/qr', methods=['GET'])
+@login_required
+def api_student_qr(student_number):
+    """Generate (or serve cached) QR code PNG for a student.
+
+    If the PNG already exists on disk it is served directly.
+    If it does not exist, it is generated via generate_single_qr and then served.
+    Returns 404 JSON when the student number is not found in the registry.
+    """
+    student = get_student(student_number)
+    if not student:
+        return jsonify({'success': False, 'message': 'Student not found.'}), 404
+
+    safe_name = student_number.replace(' ', '_').replace('/', '-')
+    filename = f"QR_{safe_name}.png"
+    filepath = os.path.join(QR_CODES_DIR, filename)
+
+    if not os.path.exists(filepath):
+        generate_single_qr(student)
+
+    return send_file(filepath, mimetype='image/png')
+
+
 @app.route('/api/students/clear', methods=['DELETE'])
 @login_required
 def api_clear_students():
