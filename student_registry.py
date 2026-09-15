@@ -259,19 +259,25 @@ def get_registry_stats() -> dict:
     return {'total': total, 'by_course': by_course}
 
 
-def get_student_by_rfid(rfid_uid: str) -> dict | None:
+def get_student_by_rfid(rfid_uid: str, conn=None) -> dict | None:
     """Get a student by their registered RFID UID."""
     uid = str(rfid_uid or '').strip()
     if not uid:
         return None
-    with get_db() as conn:
-        cur = _cur(conn)
+
+    def _run(c):
+        cur = _cur(c)
         cur.execute(
             "SELECT student_number, name, course, year, section, rfid_uid FROM students WHERE rfid_uid = %s",
             (uid,)
         )
         row = cur.fetchone()
-    return dict(row) if row else None
+        return dict(row) if row else None
+
+    if conn is not None:
+        return _run(conn)
+    with get_db() as c:
+        return _run(c)
 
 
 def register_rfid_uid(student_number: str, rfid_uid: str, confirm: bool = False) -> tuple[bool, int, dict]:

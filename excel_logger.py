@@ -56,7 +56,8 @@ def _get_session_sheet_name(session_id: str) -> str:
 
 
 def log_attendance(student_data: dict, session_id: str, status: str = "Present",
-                   fine: int = 0, fine_reason: str = '', conn=None) -> bool:
+                   fine: int = 0, fine_reason: str = '', conn=None,
+                   scan_method: str = 'qr') -> bool:
     """
     Log attendance to PostgreSQL: Time In inserts one row; Time Out updates that row.
     If *conn* is provided the caller's connection is reused (no new pool checkout).
@@ -68,19 +69,19 @@ def log_attendance(student_data: dict, session_id: str, status: str = "Present",
         if status == 'Time Out':
             cur.execute(
                 """UPDATE attendance_records
-                   SET time_out = %s, status = 'Time Out'
+                   SET time_out = %s, status = 'Time Out', scan_method_out = %s
                    WHERE session_id = %s AND student_number = %s
                      AND status = 'Time In'
                      AND (time_out IS NULL OR TRIM(COALESCE(time_out, '')) = '')""",
-                (now, session_id, sn),
+                (now, scan_method or 'qr', session_id, sn),
             )
             return cur.rowcount > 0
         time_in_val = now if status == 'Time In' else None
         cur.execute(
             """INSERT INTO attendance_records
                (recorded_at, name, student_number, course, year, section, session_id,
-                status, fine, fine_reason, time_in, time_out)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                status, fine, fine_reason, time_in, time_out, scan_method)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 now,
                 student_data.get('name', ''),
@@ -94,6 +95,7 @@ def log_attendance(student_data: dict, session_id: str, status: str = "Present",
                 fine_reason or '',
                 time_in_val,
                 None,
+                scan_method or 'qr',
             ),
         )
         return True
@@ -342,6 +344,7 @@ def get_attendance_records(session_id: str = None, student_number: str = None,
     query = (
         "SELECT ar.id, ar.recorded_at AS datetime, ar.name, ar.student_number, ar.course, "
         "ar.year, ar.section, ar.session_id, ar.status, ar.fine, ar.fine_reason, ar.time_in, ar.time_out, "
+        "ar.scan_method, ar.scan_method_out, "
         "s.subject AS session_subject, s.notes AS session_notes "
         "FROM attendance_records ar "
         "LEFT JOIN sessions s ON s.session_id = ar.session_id "

@@ -92,6 +92,24 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- RFID Hidden Input (captures USB HID / NFC HID keystrokes) -->
+                <input
+                    type="text"
+                    id="rfidHidInput"
+                    autocomplete="off"
+                    aria-label="RFID card tap listener"
+                    style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"
+                    tabindex="-1"
+                >
+                <!-- RFID Status Badge -->
+                <div class="mt-2" style="display:flex;align-items:center;gap:6px;">
+                    <span id="rfidStatusBadge" class="badge badge-success" style="font-size:11px;padding:3px 8px;">
+                        <i data-lucide="credit-card" style="width:11px;height:11px;"></i>
+                        RFID Ready
+                    </span>
+                    <span style="font-size:11px;color:var(--text-muted);">Tap card to scan</span>
+                </div>
             </div>
         </div>
 
@@ -430,6 +448,125 @@
     document.getElementById('manualQrInput')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') processManualInput();
     });
+
+    // ── RFID HID Input Listener ─────────────────────────────────────────────
+    // USB HID and NFC HID readers behave like keyboards: they rapidly type the
+    // RFID UID followed by Enter/Return.  We capture this in a hidden input that
+    // stays focused whenever the user is not interacting with another element.
+    (function () {
+        const rfidInput = document.getElementById('rfidHidInput');
+        if (!rfidInput) return;
+
+        // Milliseconds of silence after the last keystroke before we treat the
+        // accumulated string as a complete UID.  HID readers send all chars in
+        // <20 ms; 80 ms gives comfortable headroom without sluggishness.
+        const HID_DEBOUNCE_MS = 80;
+        let rfidBuffer = '';
+        let rfidTimer = null;
+
+        function focusRfid() {
+            // Only steal focus when the user is not typing in a real input.
+            const active = document.activeElement;
+            if (active && active !== rfidInput && (
+                active.tagName === 'INPUT' ||
+                active.tagName === 'TEXTAREA' ||
+                active.tagName === 'SELECT' ||
+                active.isContentEditable
+            )) return;
+            rfidInput.focus({ preventScroll: true });
+        }
+
+        // Claim focus on load and keep reclaiming it after other elements release it.
+        focusRfid();
+        document.addEventListener('click', (e) => {
+            // Small delay so the clicked element can handle its own events first.
+            setTimeout(focusRfid, 100);
+        });
+        rfidInput.addEventListener('blur', () => {
+            setTimeout(focusRfid, 150);
+        });
+
+        rfidInput.addEventListener('keydown', (e) => {
+            // HID readers end their sequence with Enter.
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                clearTimeout(rfidTimer);
+                const uid = rfidBuffer.trim();
+                rfidBuffer = '';
+                if (uid) processRfidData(uid);
+                return;
+            }
+            // Accumulate printable characters.
+            if (e.key.length === 1) {
+                rfidBuffer += e.key;
+                clearTimeout(rfidTimer);
+                // Auto-flush after silence (handles readers that omit Enter).
+                rfidTimer = setTimeout(() => {
+                    const uid = rfidBuffer.trim();
+                    rfidBuffer = '';
+                    if (uid) processRfidData(uid);
+                }, HID_DEBOUNCE_MS);
+            }
+        });
+
+        // Suppress the hidden input from showing its (invisible) content.
+        rfidInput.addEventListener('input', () => { rfidInput.value = ''; });
+
+        async function processRfidData(rfidUid) {
+            const sessionId = document.getElementById('sessionSelect')?.value;
+            if (!sessionId) {
+                showToast('Please select an active session first.', 'warning');
+                return;
+            }
+            if (isProcessing) return;
+            isProcessing = true;
+
+            try {
+                const result = await apiCall('/api/scan/rfid', 'POST', {
+                    rfid_uid: rfidUid,
+                    session_id: sessionId,
+                });
+                const resultArea = document.getElementById('scanResultArea');
+
+                if (result.success) {
+                    const isTimeOut = result.scan_type === 'time_out';
+                    const toastType = result.fine > 0 ? 'warning' : 'success';
+                    showToast(result.message, toastType);
+                    resultArea.innerHTML = buildScanResultCard(
+                        result.student, 'success', result.message,
+                        result.status, result.fine, result.fine_reason
+                    );
+                    addToFeed(result.student, true, '', result.status, result.fine);
+                    refreshStats();
+                    const pulseColor = result.fine > 0
+                        ? 'rgba(245, 158, 11, 0.5)'
+                        : (isTimeOut ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.4)');
+                    pulseSuccess(pulseColor);
+                } else if (result.error === 'unregistered_rfid') {
+                    showToast(result.message, 'error');
+                    resultArea.innerHTML = buildScanResultCard(null, 'error', result.message);
+                } else {
+                    const errorType = (
+                        result.error === 'duplicate' ||
+                        result.error === 'not_included' ||
+                        result.error === 'cooldown'
+                    ) ? 'warning' : 'error';
+                    showToast(result.message, errorType);
+                    resultArea.innerHTML = buildScanResultCard(
+                        result.student || null, errorType, result.message
+                    );
+                    if (result.student) addToFeed(result.student, false, result.message);
+                }
+            } catch (err) {
+                showToast('Network error. Please try again.', 'error');
+                console.error(err);
+            }
+
+            isProcessing = false;
+            lucide.createIcons();
+        }
+    })();
+    // ────────────────────────────────────────────────────────────────────────
 
     lucide.createIcons();
 </script>

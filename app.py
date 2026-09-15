@@ -814,7 +814,7 @@ def api_scan_qr():
 
         # 4. Validate + record scan + get count (reuses conn)
         success, scan_msg, scan_type, fine, fine_reason, attendance_count, retry_after = \
-            process_scan(conn, session_id, student_data['student_number'])
+            process_scan(conn, session_id, student_data['student_number'], scan_method='qr')
 
         if not success:
             err = 'cooldown' if retry_after is not None else 'duplicate'
@@ -832,7 +832,7 @@ def api_scan_qr():
 
         # 5. Log attendance record (reuses conn)
         log_success = log_attendance(student_data, session_id, status=status,
-                                     fine=fine, fine_reason=fine_reason, conn=conn)
+                                     fine=fine, fine_reason=fine_reason, conn=conn, scan_method='qr')
         if not log_success:
             conn.rollback()
             return jsonify({
@@ -850,7 +850,145 @@ def api_scan_qr():
         'status': status,
         'fine': fine,
         'fine_reason': fine_reason,
-        'attendance_count': attendance_count
+        'attendance_count': attendance_count,
+        'scan_method': 'qr',
+    })
+
+
+@app.route('/api/scan/rfid', methods=['POST'])
+@login_required
+def api_scan_rfid():
+    """
+    Process an RFID tap scan.
+    Looks up student by RFID UID and records Time In or Time Out using the same session filter rules.
+    """
+    data = request.get_json() or {}
+    rfid_uid = str(data.get('rfid_uid') or '').strip()
+    session_id = str(data.get('session_id') or '').strip()
+
+    if not session_id:
+        return jsonify({
+            'success': False,
+            'error': 'no_session',
+            'message': 'No active session selected. Please select or create a session first.'
+        })
+
+    if not rfid_uid:
+        return jsonify({
+            'success': False,
+            'error': 'missing_rfid',
+            'message': 'RFID UID is required.'
+        }), 400
+
+    with get_db() as conn:
+        # 1. Fetch & validate session row first
+        session = get_session_row(conn, session_id)
+        if not session:
+            return jsonify({
+                'success': False,
+                'error': 'invalid_session',
+                'message': 'Session not found.'
+            })
+
+        if not session.get('is_active'):
+            return jsonify({
+                'success': False,
+                'error': 'invalid_session',
+                'message': 'Session has been closed.'
+            })
+
+        now = ph_now()
+        expires_at = datetime.fromisoformat(session['expires_at'])
+        if now >= expires_at:
+            _cur(conn).execute(
+                "UPDATE sessions SET is_active = 0 WHERE session_id = %s",
+                (session_id,),
+            )
+            return jsonify({
+                'success': False,
+                'error': 'invalid_session',
+                'message': 'Session has expired.'
+            })
+
+        # 2. Look up student by rfid_uid
+        student_data = get_student_by_rfid(rfid_uid, conn=conn)
+        if not student_data:
+            return jsonify({
+                'success': False,
+                'error': 'unregistered_rfid',
+                'message': 'Card not recognized. Please register your RFID card with an officer.'
+            })
+
+        # 3. Course / year / section filter check
+        req_course = session.get('required_course') or ''
+        req_year = session.get('required_year') or []
+        req_section = session.get('required_section') or ''
+        student_course = str(student_data.get('course', '')).strip()
+        student_year = str(student_data.get('year', '')).strip()
+        student_section = str(student_data.get('section', '')).strip()
+
+        not_included_reasons = []
+        if req_course and student_course != req_course:
+            not_included_reasons.append(f"course ({student_course} != {req_course})")
+        if req_year and isinstance(req_year, list) and len(req_year) > 0 and student_year not in req_year:
+            year_labels = {'1': '1st', '2': '2nd', '3': '3rd', '4': '4th', '5': '5th'}
+            allowed = ', '.join(year_labels.get(y, y) + ' year' for y in req_year)
+            not_included_reasons.append(
+                f"year level (you are {year_labels.get(student_year, student_year)} year; "
+                f"session is for {allowed} only)"
+            )
+        if req_section and student_section != req_section:
+            not_included_reasons.append(f"section ({student_section} != {req_section})")
+
+        if not_included_reasons:
+            return jsonify({
+                'success': False,
+                'error': 'not_included',
+                'message': f"{student_data['name']} is not included in this session. "
+                           f"This session is for {', '.join(not_included_reasons)}.",
+                'student': student_data
+            })
+
+        # 4. Record scan with scan_method='rfid'
+        success, scan_msg, scan_type, fine, fine_reason, attendance_count, retry_after = \
+            process_scan(conn, session_id, student_data['student_number'], scan_method='rfid')
+
+        if not success:
+            err = 'cooldown' if retry_after is not None else 'duplicate'
+            body = {
+                'success': False,
+                'error': err,
+                'message': f"{student_data['name']} ({student_data['student_number']}) - {scan_msg}",
+                'student': student_data,
+            }
+            if retry_after is not None:
+                body['retry_after_seconds'] = retry_after
+            return jsonify(body)
+
+        status = 'Time In' if scan_type == 'time_in' else 'Time Out'
+
+        # 5. Log attendance record with scan_method='rfid'
+        log_success = log_attendance(student_data, session_id, status=status,
+                                     fine=fine, fine_reason=fine_reason, conn=conn, scan_method='rfid')
+        if not log_success:
+            conn.rollback()
+            return jsonify({
+                'success': False,
+                'error': 'log_error',
+                'message': 'Failed to log attendance.'
+            })
+
+    fine_msg = f' | Fine: ₱{fine} ({fine_reason})' if fine else ''
+    return jsonify({
+        'success': True,
+        'message': f"{student_data['name']} - {status} recorded!{fine_msg}",
+        'student': student_data,
+        'scan_type': scan_type,
+        'status': status,
+        'fine': fine,
+        'fine_reason': fine_reason,
+        'attendance_count': attendance_count,
+        'scan_method': 'rfid',
     })
 
 

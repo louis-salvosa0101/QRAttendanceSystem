@@ -309,7 +309,7 @@ def validate_session(session_id: str) -> tuple:
     return True, "Session is active."
 
 
-def record_student_scan(session_id: str, student_number: str) -> tuple:
+def record_student_scan(session_id: str, student_number: str, scan_method: str = 'qr') -> tuple:
     """
     Record a student scan in the session with Time In / Time Out logic.
     Returns (success, message, scan_type, fine_amount, fine_reason, retry_after_seconds).
@@ -338,9 +338,9 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
         with get_db() as conn:
             cur = _cur(conn)
             cur.execute(
-                """INSERT INTO session_scans (session_id, student_number, status, time_in, time_out, fine, fine_reason)
-                   VALUES (%s, %s, 'in', %s, NULL, %s, %s)""",
-                (session_id, student_number, now_iso, fine, fine_reason)
+                """INSERT INTO session_scans (session_id, student_number, status, time_in, time_out, fine, fine_reason, scan_method)
+                   VALUES (%s, %s, 'in', %s, NULL, %s, %s, %s)""",
+                (session_id, student_number, now_iso, fine, fine_reason, scan_method or 'qr')
             )
         return True, "Time In recorded.", 'time_in', fine, fine_reason, None
 
@@ -356,9 +356,9 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
         with get_db() as conn:
             cur = _cur(conn)
             cur.execute(
-                """UPDATE session_scans SET status = 'out', time_out = %s
+                """UPDATE session_scans SET status = 'out', time_out = %s, scan_method_out = %s
                    WHERE session_id = %s AND student_number = %s""",
-                (now_iso, session_id, student_number)
+                (now_iso, scan_method or 'qr', session_id, student_number)
             )
         return True, "Time Out recorded.", 'time_out', 0, '', None
 
@@ -366,7 +366,7 @@ def record_student_scan(session_id: str, student_number: str) -> tuple:
         return False, "Student already timed in and timed out for this session.", None, 0, '', None
 
 
-def process_scan(conn, session_id: str, student_number: str) -> tuple:
+def process_scan(conn, session_id: str, student_number: str, scan_method: str = 'qr') -> tuple:
     """
     Validate the session and record a student scan in one connection.
     Only queries the single student's row instead of loading all scanned
@@ -432,9 +432,9 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
         )
         cur.execute(
             """INSERT INTO session_scans
-               (session_id, student_number, status, time_in, time_out, fine, fine_reason)
-               VALUES (%s, %s, 'in', %s, NULL, %s, %s)""",
-            (session_id, student_number, now_iso, fine, fine_reason),
+               (session_id, student_number, status, time_in, time_out, fine, fine_reason, scan_method)
+               VALUES (%s, %s, 'in', %s, NULL, %s, %s, %s)""",
+            (session_id, student_number, now_iso, fine, fine_reason, scan_method or 'qr'),
         )
         scan_type = 'time_in'
 
@@ -448,9 +448,9 @@ def process_scan(conn, session_id: str, student_number: str) -> tuple:
             return False, _cooldown_blocked_message(retry), None, 0, '', 0, retry
         # Second scan -> Time Out (fine already applied at Time In)
         cur.execute(
-            """UPDATE session_scans SET status = 'out', time_out = %s
+            """UPDATE session_scans SET status = 'out', time_out = %s, scan_method_out = %s
                WHERE session_id = %s AND student_number = %s""",
-            (now_iso, session_id, student_number),
+            (now_iso, scan_method or 'qr', session_id, student_number),
         )
         fine, fine_reason, scan_type = 0, '', 'time_out'
 

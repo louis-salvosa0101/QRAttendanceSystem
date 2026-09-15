@@ -119,11 +119,15 @@ def init_db():
                     time_out TEXT,
                     fine INTEGER DEFAULT 0,
                     fine_reason TEXT,
+                    scan_method TEXT DEFAULT 'qr',
+                    scan_method_out TEXT,
                     UNIQUE(session_id, student_number),
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id)
                 )
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_session_scans_session ON session_scans(session_id)")
+            cur.execute("ALTER TABLE session_scans ADD COLUMN IF NOT EXISTS scan_method TEXT DEFAULT 'qr'")
+            cur.execute("ALTER TABLE session_scans ADD COLUMN IF NOT EXISTS scan_method_out TEXT")
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS attendance_records (
@@ -137,16 +141,24 @@ def init_db():
                     session_id TEXT NOT NULL,
                     status TEXT NOT NULL,
                     fine INTEGER DEFAULT 0,
-                    fine_reason TEXT
+                    fine_reason TEXT,
+                    scan_method TEXT DEFAULT 'qr',
+                    scan_method_out TEXT
                 )
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance_records(session_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance_records(student_number)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_attendance_recorded ON attendance_records(recorded_at)")
 
-            for col, defn in [('time_in', 'TEXT'), ('time_out', 'TEXT')]:
+            for col, defn in [('time_in', 'TEXT'), ('time_out', 'TEXT'),
+                               ('scan_method', "TEXT DEFAULT 'qr'"),
+                               ('scan_method_out', 'TEXT')]:
                 cur.execute(
                     f"ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS {col} {defn}"
+                )
+            for col, defn in [('scan_method_out', 'TEXT')]:
+                cur.execute(
+                    f"ALTER TABLE session_scans ADD COLUMN IF NOT EXISTS {col} {defn}"
                 )
             # Legacy rows: infer scan times from recorded_at when dedicated columns were empty
             cur.execute("""
