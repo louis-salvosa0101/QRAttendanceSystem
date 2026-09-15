@@ -68,10 +68,13 @@ def init_db():
                     name TEXT NOT NULL,
                     course TEXT,
                     year TEXT,
-                    section TEXT
+                    section TEXT,
+                    rfid_uid TEXT UNIQUE
                 )
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_students_number ON students(student_number)")
+            cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS rfid_uid TEXT UNIQUE")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_students_rfid ON students(rfid_uid)")
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS sessions (

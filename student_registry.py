@@ -74,7 +74,7 @@ def get_all_students() -> list:
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
-            "SELECT student_number, name, course, year, section FROM students ORDER BY student_number"
+            "SELECT student_number, name, course, year, section, rfid_uid FROM students ORDER BY student_number"
         )
         rows = cur.fetchall()
     return [dict(r) for r in rows]
@@ -85,7 +85,7 @@ def get_student(student_number: str) -> dict | None:
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
-            "SELECT student_number, name, course, year, section FROM students WHERE student_number = %s",
+            "SELECT student_number, name, course, year, section, rfid_uid FROM students WHERE student_number = %s",
             (str(student_number),)
         )
         row = cur.fetchone()
@@ -113,7 +113,7 @@ def get_students_by_filter(course: str = None,
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
-            f"SELECT student_number, name, course, year, section FROM students WHERE {where} ORDER BY student_number",
+            f"SELECT student_number, name, course, year, section, rfid_uid FROM students WHERE {where} ORDER BY student_number",
             params,
         )
         return [dict(r) for r in cur.fetchall()]
@@ -163,7 +163,7 @@ def search_students_by_last_name(
     with get_db() as conn:
         cur = _cur(conn)
         cur.execute(
-            f"""SELECT student_number, name, course, year, section
+            f"""SELECT student_number, name, course, year, section, rfid_uid
                 FROM students WHERE {where_sql}
                 ORDER BY name
                 LIMIT %s""",
@@ -257,3 +257,98 @@ def get_registry_stats() -> dict:
         )
         by_course = {r['course']: r['cnt'] for r in cur.fetchall()}
     return {'total': total, 'by_course': by_course}
+
+
+def get_student_by_rfid(rfid_uid: str) -> dict | None:
+    """Get a student by their registered RFID UID."""
+    uid = str(rfid_uid or '').strip()
+    if not uid:
+        return None
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "SELECT student_number, name, course, year, section, rfid_uid FROM students WHERE rfid_uid = %s",
+            (uid,)
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def register_rfid_uid(student_number: str, rfid_uid: str, confirm: bool = False) -> tuple[bool, int, dict]:
+    """
+    Link an RFID UID to a student.
+    - Returns (False, 404, dict) if student not found.
+    - Returns (False, 409, dict) if student or another student already has an RFID UID and confirm is False.
+    - Returns (True, 200, dict) on success.
+    """
+    target_sn = str(student_number or '').strip()
+    target_uid = str(rfid_uid or '').strip()
+    if not target_sn or not target_uid:
+        return False, 400, {'success': False, 'message': 'student_number and rfid_uid are required.'}
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute(
+            "SELECT student_number, name, course, year, section, rfid_uid FROM students WHERE student_number = %s",
+            (target_sn,)
+        )
+        student = cur.fetchone()
+        if not student:
+            return False, 404, {'success': False, 'message': 'Student not found.'}
+
+        existing_uid = student.get('rfid_uid')
+        if existing_uid and existing_uid != target_uid and not confirm:
+            return False, 409, {
+                'success': False,
+                'message': 'Student already has an RFID UID registered.',
+                'existing_rfid_uid': existing_uid,
+            }
+
+        # Check if another student has this RFID UID
+        cur.execute(
+            "SELECT student_number, name FROM students WHERE rfid_uid = %s AND student_number <> %s",
+            (target_uid, target_sn)
+        )
+        other_student = cur.fetchone()
+        if other_student and not confirm:
+            return False, 409, {
+                'success': False,
+                'message': f"RFID UID is already registered to student {other_student['name']} ({other_student['student_number']}).",
+                'existing_rfid_uid': target_uid,
+            }
+
+        if other_student:
+            cur.execute("UPDATE students SET rfid_uid = NULL WHERE rfid_uid = %s", (target_uid,))
+
+        cur.execute("UPDATE students SET rfid_uid = %s WHERE student_number = %s", (target_uid, target_sn))
+        cur.execute(
+            "SELECT student_number, name, course, year, section, rfid_uid FROM students WHERE student_number = %s",
+            (target_sn,)
+        )
+        updated = dict(cur.fetchone())
+
+    msg = 'RFID UID updated successfully.' if existing_uid else 'RFID UID registered successfully.'
+    return True, 200, {'success': True, 'message': msg, 'student': updated}
+
+
+def unlink_rfid_uid(student_number: str) -> tuple[bool, int, dict]:
+    """
+    Unlink RFID UID from a student.
+    Returns (False, 404, dict) if student not found or student has no RFID UID registered.
+    Returns (True, 200, dict) on success.
+    """
+    target_sn = str(student_number or '').strip()
+    if not target_sn:
+        return False, 400, {'success': False, 'message': 'student_number is required.'}
+
+    with get_db() as conn:
+        cur = _cur(conn)
+        cur.execute("SELECT rfid_uid FROM students WHERE student_number = %s", (target_sn,))
+        student = cur.fetchone()
+        if not student or not student.get('rfid_uid'):
+            return False, 404, {'success': False, 'message': 'No RFID UID registered for this student.'}
+
+        cur.execute("UPDATE students SET rfid_uid = NULL WHERE student_number = %s", (target_sn,))
+
+    return True, 200, {'success': True, 'message': 'RFID UID unlinked successfully.'}
+

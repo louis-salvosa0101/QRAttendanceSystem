@@ -33,7 +33,8 @@ from student_registry import (register_student, register_students_bulk,
                                get_students_by_filter, search_students_by_last_name,
                                delete_student,
                                update_student, clear_registry,
-                               get_registry_stats)
+                               get_registry_stats,
+                               register_rfid_uid, unlink_rfid_uid, get_student_by_rfid)
 
 from db import init_db
 from auth import login_manager, authenticate, seed_default_admin, hash_password
@@ -1944,6 +1945,47 @@ def api_download_all_qrcodes():
         )
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ─── RFID REGISTRATION ENDPOINTS ───────────────────────────────────────
+
+@app.route('/api/students/register-rfid', methods=['POST'])
+@login_required
+def api_register_rfid():
+    """
+    Register or overwrite an RFID UID for a student.
+    Body JSON: { student_number, rfid_uid, confirm: bool (optional) }
+    """
+    data = request.get_json() or {}
+    student_number = str(data.get('student_number', '')).strip()
+    rfid_uid = str(data.get('rfid_uid', '')).strip()
+    confirm = bool(data.get('confirm', False))
+
+    if not student_number or not rfid_uid:
+        return jsonify({'success': False, 'message': 'student_number and rfid_uid are required.'}), 400
+
+    student = get_student(student_number)
+    if not student:
+        return jsonify({'success': False, 'message': 'Student not found.'}), 404
+
+    success, code, result = register_rfid_uid(student_number, rfid_uid, confirm=confirm)
+    return jsonify(result), code
+
+
+@app.route('/api/students/<student_number>/rfid', methods=['DELETE'])
+@login_required
+def api_unlink_rfid(student_number):
+    """
+    Unlink an RFID UID from a student.
+    Returns 404 if the student has no UID registered or student not found.
+    """
+    student_number = str(student_number or '').strip()
+    if not student_number:
+        return jsonify({'success': False, 'message': 'student_number is required.'}), 400
+
+    success, code, result = unlink_rfid_uid(student_number)
+    return jsonify(result), code
+
 
 
 # ─── STATIC FILE SERVING ────────────────────────────────────────────────

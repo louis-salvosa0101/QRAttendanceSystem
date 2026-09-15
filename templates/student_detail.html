@@ -86,9 +86,27 @@
                         <i data-lucide="layers"></i>
                         Yr {{ student.year or '—' }} - Sec {{ student.section or '—' }}
                     </span>
+                    <span>
+                        <i data-lucide="nfc"></i>
+                        {% if student.rfid_uid %}
+                        <span class="badge badge-success" id="rfid-status-badge">RFID: {{ student.rfid_uid }}</span>
+                        {% else %}
+                        <span class="badge badge-warning" id="rfid-status-badge">RFID Not registered</span>
+                        {% endif %}
+                    </span>
                 </div>
             </div>
             <div class="profile-actions">
+                <button onclick="openRfidScanModal('{{ student.student_number|e }}', '{{ student.name|e }}', '{{ (student.rfid_uid or '')|e }}')" class="btn btn-sm btn-outline" id="btn-register-rfid">
+                    <i data-lucide="nfc"></i>
+                    {% if student.rfid_uid %}RFID{% else %}Register RFID{% endif %}
+                </button>
+                {% if student.rfid_uid %}
+                <button onclick="unlinkRfidCard('{{ student.student_number|e }}', '{{ student.name|e }}')" class="btn btn-sm btn-outline" style="border-color:var(--accent-danger);color:var(--accent-danger);" id="btn-unlink-rfid">
+                    <i data-lucide="unlink"></i>
+                    Unlink RFID
+                </button>
+                {% endif %}
                 <button onclick="openQrModal()" class="btn btn-sm btn-outline" id="btn-view-qr">
                     <i data-lucide="qr-code"></i>
                     QR
@@ -607,6 +625,44 @@
         </div>
     </div>
 </div>
+
+<!-- Register RFID Modal -->
+<div class="modal-overlay" id="rfidScanModal">
+    <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i data-lucide="nfc" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;color:var(--accent-primary);"></i>
+                Register RFID
+            </h3>
+            <button class="modal-close" onclick="closeRfidScanModal()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div style="text-align:center;padding:16px 8px;background:var(--bg-input);border-radius:var(--radius-md);margin-bottom:16px;border:1px dashed var(--accent-primary);">
+                <div style="width:48px;height:48px;border-radius:50%;background:rgba(37,99,235,0.1);color:var(--accent-primary);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;">
+                    <i data-lucide="credit-card" style="width:24px;height:24px;"></i>
+                </div>
+                <div style="font-weight:700;font-size:15px;color:var(--text-primary);margin-bottom:4px;" id="rfidModalStudentName">{{ student.name }}</div>
+                <div style="font-size:12px;color:var(--text-muted);font-family:'Inter',monospace;margin-bottom:12px;" id="rfidModalStudentNumber">{{ student.student_number }}</div>
+                <div style="font-size:13px;font-weight:600;color:var(--accent-primary);margin-bottom:6px;">Scan card now…</div>
+                <p style="font-size:11px;color:var(--text-muted);margin:0;">Tap physical ID card on USB reader or NFC HID app</p>
+            </div>
+
+            <form id="rfidScanForm" onsubmit="submitRfidScan(event)">
+                <div class="form-group">
+                    <label class="form-label">RFID UID (Scanned or Manual)</label>
+                    <input type="text" id="rfidUidInput" class="form-input" placeholder="Tap card or enter UID…" autocomplete="off" required>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-sm btn-outline" onclick="closeRfidScanModal()">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary" id="rfidSubmitBtn">
+                        <i data-lucide="check"></i>
+                        Register RFID
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -864,6 +920,100 @@
     document.getElementById('addFineModal')?.addEventListener('click', function(e) { if (e.target === this) closeAddFineModal(); });
     document.getElementById('paymentModal')?.addEventListener('click', function(e) { if (e.target === this) closePaymentModal(); });
     document.getElementById('editProfileModal')?.addEventListener('click', function(e) { if (e.target === this) closeEditProfileModal(); });
+    document.getElementById('rfidScanModal')?.addEventListener('click', function(e) { if (e.target === this) closeRfidScanModal(); });
+
+    let currentRfidStudentNumber = STUDENT_NUMBER;
+    let currentRfidStudentName = '{{ student.name|e }}';
+    let currentRfidExistingUid = '{{ (student.rfid_uid or "")|e }}';
+
+    function openRfidScanModal(studentNumber, studentName, existingUid) {
+        if (studentNumber) currentRfidStudentNumber = studentNumber;
+        if (studentName) currentRfidStudentName = studentName;
+        if (existingUid !== undefined) currentRfidExistingUid = existingUid;
+
+        document.getElementById('rfidModalStudentName').textContent = currentRfidStudentName;
+        document.getElementById('rfidModalStudentNumber').textContent = currentRfidStudentNumber;
+        const input = document.getElementById('rfidUidInput');
+        input.value = '';
+        document.getElementById('rfidScanModal').classList.add('active');
+        lucide.createIcons();
+        setTimeout(() => {
+            input.focus();
+        }, 150);
+    }
+
+    function closeRfidScanModal() {
+        document.getElementById('rfidScanModal').classList.remove('active');
+    }
+
+    async function submitRfidScan(e, confirmOverwrite = false) {
+        if (e) e.preventDefault();
+        const uid = document.getElementById('rfidUidInput').value.trim();
+        if (!uid) { showToast('Please scan or enter an RFID UID.', 'warning'); return; }
+
+        const btn = document.getElementById('rfidSubmitBtn');
+        btn.disabled = true;
+
+        try {
+            const payload = {
+                student_number: currentRfidStudentNumber,
+                rfid_uid: uid,
+            };
+            if (confirmOverwrite) {
+                payload.confirm = true;
+            }
+
+            const response = await fetch('/api/students/register-rfid', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+
+            if (response.status === 409) {
+                const existing = result.existing_rfid_uid || currentRfidExistingUid;
+                if (confirm(`Student ${currentRfidStudentName} already has RFID card registered (${existing}). Overwrite with new card (${uid})?`)) {
+                    btn.disabled = false;
+                    await submitRfidScan(null, true);
+                    return;
+                } else {
+                    btn.disabled = false;
+                    return;
+                }
+            }
+
+            if (result.success) {
+                showToast(result.message || 'RFID registered successfully.', 'success');
+                closeRfidScanModal();
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(result.message || 'Failed to register RFID.', 'error');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            showToast('Error registering RFID.', 'error');
+            btn.disabled = false;
+        }
+    }
+
+    async function unlinkRfidCard(studentNumber, studentName) {
+        if (!confirm(`Unlink RFID from ${studentName}?`)) return;
+
+        try {
+            const response = await fetch(`/api/students/${encodeURIComponent(studentNumber)}/rfid`, {
+                method: 'DELETE'
+            });
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message || 'RFID unlinked successfully.', 'success');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast(result.message || 'Failed to unlink RFID.', 'error');
+            }
+        } catch (err) {
+            showToast('Error unlinking RFID.', 'error');
+        }
+    }
 
     lucide.createIcons();
 </script>

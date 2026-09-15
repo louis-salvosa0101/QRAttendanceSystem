@@ -27,3 +27,15 @@ _Avoid_: Custom fine, extra penalty
 **Fine Payment**:
 A recorded monetary credit applied to reduce a student's total outstanding fine balance.
 _Avoid_: Transaction, receipt, settlement
+
+**RFID UID**:
+The raw hardware identifier read from the RFID/NFC chip embedded in a student's school ID card, stored as a unique text string and used to identify the student at scan time.
+_Avoid_: Card number, card ID, NFC ID, RFID code
+
+**RFID Registration**:
+The officer-performed act of linking an RFID UID to an existing Student record, binding a physical card to a known student identity.
+_Avoid_: Card enrollment, card binding, NFC setup
+
+**Scan Method**:
+The input channel used to record an Attendance Record — either `qr` (camera-read encrypted QR code) or `rfid` (card tap via USB HID reader or NFC HID app).
+_Avoid_: Scan type, input type, scan mode
